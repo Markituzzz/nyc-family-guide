@@ -1,0 +1,13 @@
+{
+  "name": "NYC · Guía familiar",
+  "short_name": "NYC Familia",
+  "description": "Guía familiar para descubrir Nueva York y decidir qué hacer.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#F4F0E8",
+  "theme_color": "#101820",
+  "lang": "es",
+  "icons": [
+    { "src": "./assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
