@@ -11,3 +11,5 @@
 9. Pégala como `apiUrl` en `config.js` y copia el mismo valor de `FAMILY_KEY` en `familyKey`.
 
 La clave familiar evita escrituras casuales, pero no es una contraseña secreta: forma parte del código público de la web. No se debe guardar información sensible en estas hojas.
+
+La hoja `Comentarios` se crea automáticamente la primera vez que la aplicación solicita el catálogo tras desplegar esta versión.

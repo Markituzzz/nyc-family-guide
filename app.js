@@ -10,7 +10,9 @@ const state = {
   decide: { near: false, borough: 'Manhattan', area: '', activity: 'cultura', time: 120, energy: 'bajo', setting: 'interior' },
   visible: 24,
   onlineData: false,
-  message: null
+  message: null,
+  detailId: null,
+  remoteComments: []
 };
 localStorage.setItem('nyc-device-id', state.deviceId);
 
@@ -64,6 +66,7 @@ async function loadRemote() {
   }))];
   if (items.length) state.catalog = items;
   state.remoteInterests = payload.data.interests || [];
+  state.remoteComments = payload.data.comments || [];
   state.onlineData = true;
 }
 
@@ -75,7 +78,7 @@ async function writeAction(action, payload) {
 }
 
 function appHeader() {
-  return `<header class="masthead"><div class="brand"><div class="brand-mark">NY</div><div><p class="eyebrow">Guía familiar · 2026</p><h1>${state.view === 'decide' ? '¿Qué hacemos ahora?' : state.view === 'catalog' ? 'Catálogo de Nueva York' : 'Nuestro itinerario'}</h1></div></div><button class="mode" data-action="toggle-mode">${state.mode === 'preparation' ? 'Modo preparación' : 'Modo viaje'}</button></header>
+  return `<header class="masthead"><div class="brand"><div class="brand-mark">NY</div><div><p class="eyebrow">Guía familiar · 2026</p><h1>${state.view === 'detail' ? 'Ficha del lugar' : state.view === 'decide' ? '¿Qué hacemos ahora?' : state.view === 'catalog' ? 'Catálogo de Nueva York' : 'Nuestro itinerario'}</h1></div></div><button class="mode" data-action="toggle-mode">${state.mode === 'preparation' ? 'Modo preparación' : 'Modo viaje'}</button></header>
   <nav class="primary-nav" aria-label="Navegación principal">${[['decide','Decidir'],['catalog','Catálogo'],['plan','Itinerario']].map(([id,label]) => `<button class="nav-button ${state.view === id ? 'active' : ''}" data-view="${id}">${label}</button>`).join('')}</nav>`;
 }
 
@@ -134,7 +137,7 @@ function recommendationCards() {
   const matches = decideMatches().slice(0, 3);
   if (!matches.length) return `<div class="panel empty"><h3>No hay coincidencias exactas</h3><p class="muted">Amplía el tiempo o marca clima y energía como indiferentes.</p><button class="button" data-action="relax">Relajar condiciones</button></div>`;
   const labels = ['La que mejor encaja', 'Favorita familiar', 'Una alternativa'];
-  return `<div class="results" style="margin-top:16px">${matches.map((item, index) => `<article class="card ${index === 0 ? 'recommended' : ''}"><span class="badge ${index===0?'accent':''}">${labels[index]}</span><h3>${escapeHtml(item.name)}</h3><p class="muted">${escapeHtml([item.area,item.type || item.subtype].filter(Boolean).join(' · '))}</p><p>${escapeHtml(item.whyItMatters || item.bestFor || 'Una opción que encaja con las condiciones seleccionadas.')}</p><div class="badge-row"><span class="badge">${escapeHtml(item.timeNeeded || `${item.idealMinutes || '?'} min`)}</span>${item.setting ? `<span class="badge">${escapeHtml(item.setting)}</span>` : ''}<span class="badge family">${familyCount(item.id)} de ${CONFIG.familySize || 4} interesados</span></div><div class="actions"><button class="button ${index===0?'primary':''}" data-add-plan="${escapeHtml(item.id)}">Añadir al plan</button>${item.mapsUrl ? `<a class="button" href="${escapeHtml(item.mapsUrl)}" target="_blank" rel="noopener">Google Maps</a>` : ''}</div></article>`).join('')}</div>`;
+  return `<div class="results" style="margin-top:16px">${matches.map((item, index) => `<article class="card ${index === 0 ? 'recommended' : ''}"><span class="badge ${index===0?'accent':''}">${labels[index]}</span><h3>${escapeHtml(item.name)}</h3><p class="muted">${escapeHtml([item.area,item.type || item.subtype].filter(Boolean).join(' · '))}</p><p>${escapeHtml(item.shortDescription || item.whyItMatters || item.bestFor || 'Una opción que encaja con las condiciones seleccionadas.')}</p><div class="badge-row"><span class="badge">${escapeHtml(item.timeNeeded || `${item.idealMinutes || '?'} min`)}</span>${item.setting ? `<span class="badge">${escapeHtml(item.setting)}</span>` : ''}<span class="badge family">${familyCount(item.id)} de ${CONFIG.familySize || 4} interesados</span></div><div class="actions"><button class="button ${index===0?'primary':''}" data-add-plan="${escapeHtml(item.id)}">Añadir al plan</button><button class="button" data-detail="${escapeHtml(item.id)}">Ver ficha</button>${item.mapsUrl ? `<a class="button" href="${escapeHtml(item.mapsUrl)}" target="_blank" rel="noopener">Google Maps</a>` : ''}</div></article>`).join('')}</div>`;
 }
 
 function catalogFiltered() {
@@ -162,7 +165,41 @@ function renderCatalog() {
   ${state.mode === 'preparation' ? `<div class="panel intro"><h3>¿Qué te gustaría visitar?</h3><p class="muted">Marca tus intereses. Las coincidencias familiares influirán en las recomendaciones.</p><div class="progress"><span style="width:${Math.min(100, state.catalog.length ? selected/state.catalog.length*100 : 0)}%"></span></div></div>` : ''}
   <div id="proposal-slot"></div><div class="filters"><label>Buscar<input type="search" data-filter="search" value="${escapeHtml(state.filters.search)}" placeholder="Lugar, barrio o actividad"></label><label>Mostrar<select data-filter="status"><option value="all">Todos</option><option value="pending" ${state.filters.status==='pending'?'selected':''}>Pendientes</option><option value="selected" ${state.filters.status==='selected'?'selected':''}>Mis selecciones</option><option value="family" ${state.filters.status==='family'?'selected':''}>Coincidencias</option></select></label><label>Tipo<select data-filter="type">${selectOptions(types,state.filters.type,'Todos')}</select></label><label>Borough<select data-filter="borough">${selectOptions(boroughs,state.filters.borough,'Todos')}</select></label><label>Zona<select data-filter="area">${selectOptions(areas,state.filters.area,'Todas')}</select></label></div>
   <div class="catalog-meta"><strong>${filtered.length} resultados</strong><span class="sync-state">${state.onlineData ? 'Sincronizado con Google Sheets' : 'Datos locales'}</span></div>
-  <div class="catalog-list">${filtered.slice(0,state.visible).map(item => `<article class="card catalog-item"><div><div class="badge-row"><span class="badge">${escapeHtml(item.type || item.itemKind)}</span>${item.origin === 'family' ? '<span class="badge accent">Propuesto por la familia</span>' : ''}</div><h3>${escapeHtml(item.name)}</h3><p class="muted">${escapeHtml([item.area,item.borough,item.timeNeeded].filter(Boolean).join(' · '))}</p></div><button class="button interest-button ${state.interests.has(item.id)?'selected':''}" data-interest="${escapeHtml(item.id)}">${state.interests.has(item.id)?'Seleccionado':'Me gustaría ir'}</button></article>`).join('')}</div>${filtered.length > state.visible ? '<button class="button block" data-action="more">Mostrar más</button>' : ''}</section>`;
+  <div class="catalog-list">${filtered.slice(0,state.visible).map(item => `<article class="card catalog-item"><button class="catalog-copy" data-detail="${escapeHtml(item.id)}" aria-label="Ver ficha de ${escapeHtml(item.name)}"><div class="badge-row"><span class="badge">${escapeHtml(item.type || item.itemKind)}</span>${item.origin === 'family' ? '<span class="badge accent">Propuesto por la familia</span>' : ''}</div><h3>${escapeHtml(item.name)}</h3><p class="muted">${escapeHtml([item.area,item.borough,item.timeNeeded].filter(Boolean).join(' · '))}</p><p class="catalog-description">${escapeHtml(item.shortDescription || item.whyItMatters || '')}</p></button><button class="button interest-button ${state.interests.has(item.id)?'selected':''}" data-interest="${escapeHtml(item.id)}">${state.interests.has(item.id)?'Seleccionado':'Me gustaría ir'}</button></article>`).join('')}</div>${filtered.length > state.visible ? '<button class="button block" data-action="more">Mostrar más</button>' : ''}</section>`;
+}
+
+function itemComments(itemId) {
+  return (state.remoteComments || []).filter(comment => comment.itemId === itemId).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+}
+
+function renderDetail() {
+  const item = state.catalog.find(entry => entry.id === state.detailId);
+  if (!item) { state.view = 'catalog'; return renderCatalog(); }
+  const comments = itemComments(item.id);
+  const description = item.description || item.shortDescription || item.whyItMatters || item.bestFor || 'Todavía no hay una descripción editorial completa.';
+  const context = item.storyAngle || item.bestFor || item.ifCondition || '';
+  const externalRating = item.rating ? `<div class="rating-block"><strong>${escapeHtml(item.rating)}</strong><span>${escapeHtml(item.reviews ? `${Number(item.reviews).toLocaleString('es-ES')} opiniones` : 'Valoración externa')}</span></div>` : '';
+  return `<section class="view active detail-view"><button class="back-link" data-action="back-detail">← Volver</button>
+    <header class="detail-hero"><div><div class="badge-row"><span class="badge accent">${escapeHtml(item.type || item.itemKind)}</span>${item.origin === 'family' ? '<span class="badge">Propuesto por la familia</span>' : ''}</div><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml([item.area,item.borough].filter(Boolean).join(' · '))}</p></div><div class="detail-monogram" aria-hidden="true">${escapeHtml(item.name.slice(0,2).toUpperCase())}</div></header>
+    <div class="detail-actions"><button class="button primary" data-add-plan="${escapeHtml(item.id)}">Añadir al itinerario</button><button class="button interest-button ${state.interests.has(item.id)?'selected':''}" data-interest="${escapeHtml(item.id)}">${state.interests.has(item.id)?'Me interesa':'Me gustaría ir'}</button>${item.mapsUrl ? `<a class="button" href="${escapeHtml(item.mapsUrl)}" target="_blank" rel="noopener">Abrir en Maps</a>` : ''}${item.officialUrl ? `<a class="button" href="${escapeHtml(item.officialUrl)}" target="_blank" rel="noopener">Web oficial</a>` : ''}</div>
+    <div class="detail-layout"><div class="detail-main">
+      <section class="detail-section"><p class="detail-lead">${escapeHtml(description)}</p>${context && context !== description ? `<p>${escapeHtml(context)}</p>` : ''}</section>
+      <section class="detail-section"><h3>Información práctica</h3><dl class="facts-list">${detailFact('Duración',item.timeNeeded || (item.idealMinutes ? `${item.idealMinutes} min` : ''))}${detailFact('Precio',item.price || item.costLevel)}${detailFact('Mejor momento',item.bestMoment)}${detailFact('Entorno',item.setting || item.weatherFit)}${detailFact('Energía',item.energyLevel)}${detailFact('Reserva',item.reservationStatus)}${detailFact('Dirección',item.address)}${detailFact('Última comprobación',item.lastChecked)}</dl></section>
+      ${item.notes ? `<section class="detail-section"><h3>Conviene saber</h3><p>${escapeHtml(item.notes)}</p></section>` : ''}
+      <section class="detail-section"><div class="comments-head"><div><h3>Comentarios familiares</h3><p class="muted">Consejos y opiniones compartidos durante la preparación y el viaje.</p></div><span class="badge family">${comments.length}</span></div>${comments.length ? `<div class="comments-list">${comments.map(comment => `<article class="family-comment"><span class="comment-type">${escapeHtml(comment.commentType || 'comentario')}</span><p>${escapeHtml(comment.text)}</p><time>${escapeHtml(formatDate(comment.createdAt))}</time></article>`).join('')}</div>` : '<p class="muted">Todavía no hay comentarios.</p>'}
+      <form id="comment-form" class="comment-form"><label>Tipo<select name="commentType"><option value="consejo">Consejo</option><option value="opinión">Opinión</option><option value="aviso">Aviso</option></select></label><label>Comentario<textarea name="text" required maxlength="600" rows="3" placeholder="Añade algo útil para la familia"></textarea></label><button class="button primary" type="submit">Publicar comentario</button></form></section>
+    </div><aside class="detail-aside"><div class="panel"><p class="eyebrow">Interés familiar</p><strong class="big-number">${familyCount(item.id)}/${CONFIG.familySize || 4}</strong><p class="muted">personas interesadas</p></div>${externalRating ? `<div class="panel"><p class="eyebrow">Opiniones externas</p>${externalRating}${item.mapsUrl ? `<a href="${escapeHtml(item.mapsUrl)}" target="_blank" rel="noopener">Leer en Google Maps →</a>` : ''}</div>` : ''}</aside></div>
+  </section>`;
+}
+
+function detailFact(label, value) {
+  return value ? `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>` : '';
+}
+
+function formatDate(value) {
+  if (!value) return 'Ahora';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat('es-ES',{day:'numeric',month:'short',year:'numeric'}).format(date);
 }
 
 function proposalForm() {
@@ -175,12 +212,14 @@ function renderPlan() {
 }
 
 function render() {
-  app.innerHTML = `<main class="shell">${appHeader()}${notice()}${state.view === 'decide' ? renderDecide() : state.view === 'catalog' ? renderCatalog() : renderPlan()}</main>`;
+  app.innerHTML = `<main class="shell">${appHeader()}${notice()}${state.view === 'detail' ? renderDetail() : state.view === 'decide' ? renderDecide() : state.view === 'catalog' ? renderCatalog() : renderPlan()}</main>`;
   bindEvents();
 }
 
 function bindEvents() {
   document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => { state.view = button.dataset.view; state.message = null; render(); }));
+  document.querySelectorAll('[data-detail]').forEach(button => button.addEventListener('click', () => { state.detailId = button.dataset.detail; state.view = 'detail'; state.message = null; render(); window.scrollTo({top:0,behavior:'smooth'}); }));
+  document.querySelector('[data-action="back-detail"]')?.addEventListener('click', () => { state.view = 'catalog'; render(); });
   document.querySelector('[data-action="toggle-mode"]')?.addEventListener('click', () => { state.mode = state.mode === 'preparation' ? 'trip' : 'preparation'; state.view = state.mode === 'preparation' ? 'catalog' : 'decide'; render(); });
   document.querySelector('[data-action="near"]')?.addEventListener('click', () => { state.decide.near = !state.decide.near; render(); });
   document.querySelectorAll('[data-decide]').forEach(control => control.addEventListener('change', () => { state.decide[control.dataset.decide] = control.dataset.decide === 'time' ? Number(control.value) : control.value; if (control.dataset.decide === 'borough') state.decide.area = ''; render(); }));
@@ -203,6 +242,8 @@ function bindEvents() {
   }));
   document.querySelectorAll('[data-interest]').forEach(button => button.addEventListener('click', async () => { const id = button.dataset.interest; state.interests.has(id) ? state.interests.delete(id) : state.interests.add(id); saveLocal(); render(); try { await writeAction('interest', { deviceId: state.deviceId, itemId: id, itemKind: state.catalog.find(item => item.id===id)?.itemKind || 'place', interested: state.interests.has(id) }); } catch {} }));
   document.querySelectorAll('[data-remove-plan]').forEach(button => button.addEventListener('click', () => { state.plan = state.plan.filter(id => id !== button.dataset.removePlan); saveLocal(); render(); }));
+  document.querySelectorAll('[data-add-plan]').forEach(button => button.addEventListener('click', async () => { if (!state.plan.includes(button.dataset.addPlan)) state.plan.push(button.dataset.addPlan); saveLocal(); button.textContent='Añadido'; try { await writeAction('planItem',{deviceId:state.deviceId,itemId:button.dataset.addPlan,position:state.plan.length}); } catch {} }));
+  document.querySelector('#comment-form')?.addEventListener('submit', submitComment);
 }
 
 function bindResultEvents() {
@@ -222,6 +263,16 @@ function bindProposal() {
     render();
     try { await writeAction('proposal',proposal); } catch (error) { state.message={type:'error',text:`El lugar está guardado localmente, pero no se pudo sincronizar: ${error.message}`}; render(); }
   });
+}
+
+async function submitComment(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  const comment = { commentId:`COM-${crypto.randomUUID()}`, itemId:state.detailId, deviceId:state.deviceId, commentType:data.get('commentType'), text:data.get('text').trim(), createdAt:new Date().toISOString() };
+  state.remoteComments.unshift(comment);
+  state.message = {type:'success',text:'Comentario añadido.'};
+  render();
+  try { await writeAction('comment',comment); } catch (error) { state.message={type:'error',text:`El comentario se conserva en pantalla, pero no pudo sincronizarse: ${error.message}`}; render(); }
 }
 
 async function start() {

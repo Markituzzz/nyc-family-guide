@@ -48,6 +48,7 @@ const places = rowsToObjects(source.Lugares).map((place, index) => ({
   teenFit: place.teenFit,
   adultFit: place.adultFit,
   whyItMatters: place.whyItMatters,
+  storyAngle: place.storyAngle,
   bestFor: place.bestFor,
   ifCondition: place.ifCondition,
   timeNeeded: place.timeNeeded,
