@@ -5,20 +5,22 @@ const SHEETS = {
 };
 
 function doGet(e) {
+  const params = (e && e.parameter) || {};
   try {
-    assertFamilyKey_(e.parameter.key);
-    const action = e.parameter.action || 'snapshot';
+    assertFamilyKey_(params.key);
+    const action = params.action || 'health';
     const data = action === 'snapshot' ? getSnapshot_() : action === 'health' ? { status: 'ok', timestamp: new Date().toISOString() } : null;
-    if (!data) throw new Error('Acción no disponible.');
-    return output_(e, { ok: true, data: data });
-  } catch (error) { return output_(e, { ok: false, error: error.message }); }
+    if (!data) throw new Error('Accion no disponible.');
+    return output_(params, { ok: true, data: data });
+  } catch (error) { return output_(params, { ok: false, error: error.message }); }
 }
 
 function doPost(e) {
+  const params = (e && e.parameter) || {};
   try {
-    assertFamilyKey_(e.parameter.key);
-    const action = e.parameter.action;
-    const payload = JSON.parse(e.parameter.payload || '{}');
+    assertFamilyKey_(params.key);
+    const action = params.action;
+    const payload = JSON.parse(params.payload || '{}');
     const lock = LockService.getScriptLock();
     lock.waitLock(10000);
     try {
@@ -26,7 +28,7 @@ function doPost(e) {
       else if (action === 'interest') upsertInterest_(payload);
       else if (action === 'planItem') upsertPlanItem_(payload);
       else if (action === 'comment') addComment_(payload);
-      else throw new Error('Acción de escritura no disponible.');
+      else throw new Error('Accion de escritura no disponible.');
     } finally { lock.releaseLock(); }
     return json_({ ok: true });
   } catch (error) { return json_({ ok: false, error: error.message }); }
@@ -70,7 +72,7 @@ function addProposal_(payload) {
   const duplicate = existing.slice(1).some(function(row) {
     return row[idIndex] === payload.id || normalizeUrl_(row[mapsIndex]) === normalizeUrl_(payload.mapsUrl);
   });
-  if (duplicate) throw new Error('Ese lugar ya está propuesto.');
+  if (duplicate) throw new Error('Ese lugar ya esta propuesto.');
   appendObject_(sheet, headers, {
     id: safeText_(payload.id, 100), name: safeText_(payload.name, 160), mapsUrl: safeUrl_(payload.mapsUrl),
     notes: safeText_(payload.notes, 500), origin: 'family', status: 'propuesto', published: true,
@@ -124,8 +126,9 @@ function addComment_(payload) {
   });
 }
 
-function output_(e, payload) {
-  const callback = String(e.parameter.callback || '');
+function output_(params, payload) {
+  params = params || {};
+  const callback = String(params.callback || '');
   if (callback && /^[A-Za-z_$][0-9A-Za-z_$\.]*$/.test(callback)) {
     return ContentService.createTextOutput(callback + '(' + JSON.stringify(payload) + ');').setMimeType(ContentService.MimeType.JAVASCRIPT);
   }
@@ -179,7 +182,7 @@ function requireFields_(object, fields) { fields.forEach(function(field) { if (!
 function safeText_(value, length) { return String(value || '').replace(/[\u0000-\u001F]/g, ' ').trim().slice(0, length); }
 function safeUrl_(value) {
   const url = String(value || '').trim();
-  if (!/^https:\/\/(www\.)?(google\.[^/]+\/maps|maps\.app\.goo\.gl)\//i.test(url)) throw new Error('Introduce un enlace válido de Google Maps.');
+  if (!/^https:\/\/(www\.)?(google\.[^/]+\/maps|maps\.app\.goo\.gl)\//i.test(url)) throw new Error('Introduce un enlace valido de Google Maps.');
   return url.slice(0, 1000);
 }
 function normalizeUrl_(value) { return String(value || '').trim().replace(/[?#].*$/, '').replace(/\/$/, '').toLowerCase(); }

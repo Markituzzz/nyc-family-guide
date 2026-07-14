@@ -22,6 +22,7 @@ const normalize = value => String(value ?? '').normalize('NFD').replace(/[\u0300
 const slug = value => normalize(value).replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 const unique = values => [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
 const familyCount = itemId => state.remoteInterests?.filter(item => item.itemId === itemId && String(item.interested).toLowerCase() !== 'false').length || (state.interests.has(itemId) ? 1 : 0);
+const decisionArea = item => item.simpleArea || item.macroArea || item.decisionArea || item.cluster || item.area || '';
 
 function saveLocal() {
   localStorage.setItem('nyc-interests', JSON.stringify([...state.interests]));
@@ -108,7 +109,7 @@ function decideMatches() {
   const d = state.decide;
   return state.catalog.filter(item => {
     if (!d.near && d.borough && item.borough && item.borough !== d.borough) return false;
-    if (!d.near && d.area && item.area && item.area !== d.area) return false;
+    if (!d.near && d.area && decisionArea(item) !== d.area) return false;
     if (activityFor(item) !== d.activity) return false;
     if (d.time < 999 && item.maxMinutes && Number(item.maxMinutes) > d.time) return false;
     if (d.energy === 'bajo' && normalize(item.energyLevel) && normalize(item.energyLevel) !== 'bajo') return false;
@@ -124,7 +125,7 @@ function decideMatches() {
 
 function renderDecide() {
   const boroughs = unique(state.catalog.map(item => item.borough));
-  const areas = unique(state.catalog.filter(item => !state.decide.borough || item.borough === state.decide.borough).map(item => item.area));
+  const areas = unique(state.catalog.filter(item => !state.decide.borough || item.borough === state.decide.borough).map(decisionArea));
   const matches = decideMatches();
   return `<section class="view active"><div class="panel intro"><h2>Reducimos las opciones por vosotros</h2><p class="muted">Elige solo lo importante. Los intereses previos ayudan a ordenar los resultados.</p></div>
   <div class="step"><h3>1 · ¿Dónde queréis estar?</h3><div class="location-grid"><button class="button near ${state.decide.near ? 'active' : ''}" data-action="near">Cerca de mí</button><label>Borough<select data-decide="borough" ${state.decide.near ? 'disabled' : ''}>${selectOptions(boroughs,state.decide.borough,'Cualquier borough')}</select></label><label>Zona o barrio<select data-decide="area" ${state.decide.near ? 'disabled' : ''}>${selectOptions(areas,state.decide.area,'Cualquier zona')}</select></label></div></div>
@@ -143,11 +144,11 @@ function recommendationCards() {
 function catalogFiltered() {
   const f = state.filters;
   return state.catalog.filter(item => {
-    const haystack = normalize(`${item.name} ${item.type} ${item.subtype} ${item.area} ${item.borough} ${item.category}`);
+    const haystack = normalize(`${item.name} ${item.type} ${item.subtype} ${item.area} ${decisionArea(item)} ${item.borough} ${item.category}`);
     if (f.search && !haystack.includes(normalize(f.search))) return false;
     if (f.type && item.type !== f.type) return false;
     if (f.borough && item.borough !== f.borough) return false;
-    if (f.area && item.area !== f.area) return false;
+    if (f.area && decisionArea(item) !== f.area) return false;
     if (f.status === 'selected' && !state.interests.has(item.id)) return false;
     if (f.status === 'family' && familyCount(item.id) < 2) return false;
     if (f.status === 'pending' && state.interests.has(item.id)) return false;
@@ -158,7 +159,7 @@ function catalogFiltered() {
 function renderCatalog() {
   const types = unique(state.catalog.map(item => item.type));
   const boroughs = unique(state.catalog.map(item => item.borough));
-  const areas = unique(state.catalog.filter(item => !state.filters.borough || item.borough === state.filters.borough).map(item => item.area));
+  const areas = unique(state.catalog.filter(item => !state.filters.borough || item.borough === state.filters.borough).map(decisionArea));
   const filtered = catalogFiltered();
   const selected = state.interests.size;
   return `<section class="view active"><div class="section-head"><div><h2>Todo el catálogo</h2><p class="muted">${state.catalog.length} opciones · ${selected} seleccionadas en este dispositivo</p></div><div class="catalog-toolbar"><button class="button primary" data-action="proposal-form">+ Añadir lugar</button></div></div>
@@ -211,6 +212,18 @@ function renderPlan() {
   return `<section class="view active"><div class="section-head"><div><h2>Plan familiar</h2><p class="muted">${items.length} ${items.length===1?'parada':'paradas'} · orden flexible</p></div></div>${items.length ? `<div class="plan-list">${items.map((item,index) => `<article class="card plan-item"><div class="plan-position">${index+1}</div><div><h3>${escapeHtml(item.name)}</h3><p class="muted">${escapeHtml([item.area,item.timeNeeded].filter(Boolean).join(' · '))}</p></div><button class="button small danger" data-remove-plan="${escapeHtml(item.id)}">Quitar</button></article>`).join('')}</div><button class="button primary block" style="margin-top:14px" data-action="maps-plan">Abrir recorrido en Google Maps</button>` : `<div class="panel empty"><h3>El itinerario está vacío</h3><p class="muted">Añade lugares desde Decidir o desde el catálogo.</p><button class="button primary" data-view="decide">Buscar un plan</button></div>`}</section>`;
 }
 
+function openMapsPlan() {
+  const items = state.plan.map(id => state.catalog.find(item => item.id === id)).filter(item => item?.lat && item?.lng);
+  if (!items.length) {
+    state.message = { type: 'error', text: 'No hay lugares con coordenadas en el itinerario.' };
+    render();
+    return;
+  }
+  const points = items.map(item => `${item.lat},${item.lng}`);
+  const url = items.length === 1 ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(points[0])}` : `https://www.google.com/maps/dir/${points.map(encodeURIComponent).join('/')}`;
+  window.open(url, '_blank', 'noopener');
+}
+
 function render() {
   app.innerHTML = `<main class="shell">${appHeader()}${notice()}${state.view === 'detail' ? renderDetail() : state.view === 'decide' ? renderDecide() : state.view === 'catalog' ? renderCatalog() : renderPlan()}</main>`;
   bindEvents();
@@ -243,12 +256,14 @@ function bindEvents() {
   document.querySelectorAll('[data-interest]').forEach(button => button.addEventListener('click', async () => { const id = button.dataset.interest; state.interests.has(id) ? state.interests.delete(id) : state.interests.add(id); saveLocal(); render(); try { await writeAction('interest', { deviceId: state.deviceId, itemId: id, itemKind: state.catalog.find(item => item.id===id)?.itemKind || 'place', interested: state.interests.has(id) }); } catch {} }));
   document.querySelectorAll('[data-remove-plan]').forEach(button => button.addEventListener('click', () => { state.plan = state.plan.filter(id => id !== button.dataset.removePlan); saveLocal(); render(); }));
   document.querySelectorAll('[data-add-plan]').forEach(button => button.addEventListener('click', async () => { if (!state.plan.includes(button.dataset.addPlan)) state.plan.push(button.dataset.addPlan); saveLocal(); button.textContent='Añadido'; try { await writeAction('planItem',{deviceId:state.deviceId,itemId:button.dataset.addPlan,position:state.plan.length}); } catch {} }));
+  document.querySelector('[data-action="maps-plan"]')?.addEventListener('click', openMapsPlan);
   document.querySelector('#comment-form')?.addEventListener('submit', submitComment);
 }
 
 function bindResultEvents() {
   document.querySelector('[data-action="relax"]')?.addEventListener('click', () => { state.decide.time=999; state.decide.energy='cualquiera'; state.decide.setting='cualquiera'; render(); });
   document.querySelectorAll('[data-add-plan]').forEach(button => button.addEventListener('click', async () => { if (!state.plan.includes(button.dataset.addPlan)) state.plan.push(button.dataset.addPlan); saveLocal(); button.textContent='Añadido'; try { await writeAction('planItem',{deviceId:state.deviceId,itemId:button.dataset.addPlan,position:state.plan.length}); } catch {} }));
+  document.querySelectorAll('#recommendations [data-detail]').forEach(button => button.addEventListener('click', () => { state.detailId = button.dataset.detail; state.view = 'detail'; state.message = null; render(); window.scrollTo({top:0,behavior:'smooth'}); }));
 }
 
 function bindProposal() {
