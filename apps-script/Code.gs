@@ -1,7 +1,8 @@
 const SPREADSHEET_ID = '1WaotDKkqltUQlrPKYuo7ZupEIKUF27tuklrGcSe4brM';
 const SHEETS = {
   places: 'Lugares', experiences: 'Experiencias', interests: 'Intereses', proposals: 'PropuestasFamilia',
-  comments: 'Comentarios', itineraries: 'Itinerarios', itineraryItems: 'ItinerarioItems'
+  comments: 'Comentarios', itineraries: 'Itinerarios', itineraryItems: 'ItinerarioItems',
+  planChanges: 'ItinerarioCambios'
 };
 
 function doGet(e) {
@@ -26,8 +27,8 @@ function doPost(e) {
     try {
       if (action === 'proposal') addProposal_(payload);
       else if (action === 'interest') upsertInterest_(payload);
-      else if (action === 'planItem') upsertPlanItem_(payload);
-      else if (action === 'removePlanItem') removePlanItem_(payload);
+      else if (action === 'planItem') { logPlanChange_(payload, 'add'); upsertPlanItem_(payload); }
+      else if (action === 'removePlanItem') { logPlanChange_(payload, 'remove'); removePlanItem_(payload); }
       else if (action === 'comment') addComment_(payload);
       else throw new Error('Accion de escritura no disponible.');
     } finally { lock.releaseLock(); }
@@ -122,6 +123,17 @@ function upsertPlanItem_(payload) {
   });
 }
 
+function logPlanChange_(payload, changeType) {
+  requireFields_(payload, ['deviceId', 'itemId']);
+  const sheet = getSheet_(SHEETS.planChanges);
+  const headers = ensureHeaders_(sheet, ['changeId', 'itineraryId', 'itemId', 'changeType', 'position', 'deviceId', 'createdAt', 'processedAt']);
+  appendObject_(sheet, headers, {
+    changeId: Utilities.getUuid(), itineraryId: 'PLAN-FAMILIAR', itemId: safeText_(payload.itemId, 100),
+    changeType: changeType, position: Number(payload.position) || '', deviceId: safeText_(payload.deviceId, 100),
+    createdAt: new Date(), processedAt: ''
+  });
+}
+
 function removePlanItem_(payload) {
   requireFields_(payload, ['itemId']);
   const itineraryId = 'PLAN-FAMILIAR';
@@ -133,6 +145,25 @@ function removePlanItem_(payload) {
   for (let index = rows.length - 1; index >= 1; index--) {
     if (rows[index][itineraryIndex] === itineraryId && rows[index][itemIndex] === payload.itemId) items.deleteRow(index + 1);
   }
+}
+
+function syncPlanChanges_() {
+  const changes = getSheet_(SHEETS.planChanges);
+  const changeHeaders = headers_(changes);
+  const rows = changes.getDataRange().getDisplayValues();
+  const itineraryId = 'PLAN-FAMILIAR';
+  rows.slice(1).forEach(function(row, offset) {
+    const processedAt = row[changeHeaders.indexOf('processedAt')];
+    if (processedAt) return;
+    const payload = {
+      itemId: row[changeHeaders.indexOf('itemId')],
+      position: row[changeHeaders.indexOf('position')]
+    };
+    const type = row[changeHeaders.indexOf('changeType')];
+    if (row[changeHeaders.indexOf('itineraryId')] === itineraryId && type === 'add') upsertPlanItem_({ deviceId: 'sync', itemId: payload.itemId, position: payload.position });
+    if (row[changeHeaders.indexOf('itineraryId')] === itineraryId && type === 'remove') removePlanItem_({ itemId: payload.itemId });
+    changes.getRange(offset + 2, changeHeaders.indexOf('processedAt') + 1).setValue(new Date());
+  });
 }
 
 function addComment_(payload) {
@@ -171,6 +202,11 @@ function getSheet_(name) {
   if (!sheet && name === SHEETS.comments) {
     sheet = spreadsheet.insertSheet(name);
     sheet.appendRow(['commentId', 'itemId', 'deviceId', 'commentType', 'text', 'createdAt']);
+    sheet.setFrozenRows(1);
+  }
+  if (!sheet && name === SHEETS.planChanges) {
+    sheet = spreadsheet.insertSheet(name);
+    sheet.appendRow(['changeId', 'itineraryId', 'itemId', 'changeType', 'position', 'deviceId', 'createdAt', 'processedAt']);
     sheet.setFrozenRows(1);
   }
   if (!sheet) throw new Error('No existe la hoja ' + name + '.');
