@@ -65,7 +65,10 @@ function readObjects_(sheetName) {
 function addProposal_(payload) {
   requireFields_(payload, ['id', 'name', 'mapsUrl', 'deviceId']);
   const sheet = getSheet_(SHEETS.proposals);
-  const headers = headers_(sheet);
+  const headers = ensureHeaders_(sheet, [
+    'id', 'name', 'mapsUrl', 'type', 'category', 'area', 'borough', 'shortDescription', 'whyItMatters',
+    'notes', 'origin', 'status', 'published', 'proposedAt', 'deviceId'
+  ]);
   const existing = sheet.getDataRange().getDisplayValues();
   const idIndex = headers.indexOf('id');
   const mapsIndex = headers.indexOf('mapsUrl');
@@ -75,6 +78,12 @@ function addProposal_(payload) {
   if (duplicate) throw new Error('Ese lugar ya esta propuesto.');
   appendObject_(sheet, headers, {
     id: safeText_(payload.id, 100), name: safeText_(payload.name, 160), mapsUrl: safeUrl_(payload.mapsUrl),
+    type: safeText_(payload.type || 'Propuesto por la familia', 80),
+    category: safeText_(payload.category || 'Propuesta familiar', 100),
+    area: safeText_(payload.area, 120),
+    borough: safeText_(payload.borough, 80),
+    shortDescription: safeText_(payload.shortDescription || payload.whyItMatters || payload.reason, 500),
+    whyItMatters: safeText_(payload.whyItMatters || payload.reason, 500),
     notes: safeText_(payload.notes, 500), origin: 'family', status: 'propuesto', published: true,
     proposedAt: new Date(), deviceId: safeText_(payload.deviceId, 100)
   });
@@ -158,6 +167,17 @@ function headers_(sheet) {
   const width = sheet.getLastColumn();
   if (!width) throw new Error('La hoja ' + sheet.getName() + ' no tiene cabeceras.');
   return sheet.getRange(1, 1, 1, width).getDisplayValues()[0].map(String);
+}
+
+function ensureHeaders_(sheet, requiredHeaders) {
+  const headers = headers_(sheet);
+  requiredHeaders.forEach(function(header) {
+    if (headers.indexOf(header) === -1) {
+      sheet.getRange(1, headers.length + 1).setValue(header);
+      headers.push(header);
+    }
+  });
+  return headers;
 }
 
 function appendObject_(sheet, headers, object) {
