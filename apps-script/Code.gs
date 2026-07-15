@@ -27,6 +27,7 @@ function doPost(e) {
       if (action === 'proposal') addProposal_(payload);
       else if (action === 'interest') upsertInterest_(payload);
       else if (action === 'planItem') upsertPlanItem_(payload);
+      else if (action === 'removePlanItem') removePlanItem_(payload);
       else if (action === 'comment') addComment_(payload);
       else throw new Error('Accion de escritura no disponible.');
     } finally { lock.releaseLock(); }
@@ -119,6 +120,19 @@ function upsertPlanItem_(payload) {
     itineraryItemId: Utilities.getUuid(), itineraryId: itineraryId, itemId: safeText_(payload.itemId, 100),
     itemKind: 'place', position: Number(payload.position) || rows.length, notes: '', addedAt: new Date()
   });
+}
+
+function removePlanItem_(payload) {
+  requireFields_(payload, ['itemId']);
+  const itineraryId = 'PLAN-FAMILIAR';
+  const items = getSheet_(SHEETS.itineraryItems);
+  const headers = headers_(items);
+  const rows = items.getDataRange().getDisplayValues();
+  const itineraryIndex = headers.indexOf('itineraryId');
+  const itemIndex = headers.indexOf('itemId');
+  for (let index = rows.length - 1; index >= 1; index--) {
+    if (rows[index][itineraryIndex] === itineraryId && rows[index][itemIndex] === payload.itemId) items.deleteRow(index + 1);
+  }
 }
 
 function addComment_(payload) {
