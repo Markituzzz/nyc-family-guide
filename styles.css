@@ -143,6 +143,7 @@ textarea { resize: vertical; }
 .know-note strong { display: inline; margin-right: 6px; color: var(--ink); font-size: .68rem; letter-spacing: .06em; text-transform: uppercase; }
 .interest-button.selected { background: var(--green); color: white; border-color: var(--green); }
 .empty { text-align: center; padding: 30px 18px; }
+.loading-panel { min-height: 220px; display: grid; align-content: center; }
 .form-panel { margin-bottom: 16px; }
 .form-panel h3 { margin-top: 0; }
 .form-grid { display: grid; gap: 12px; }

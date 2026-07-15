@@ -5,11 +5,13 @@ const state = {
   catalog: [],
   interests: new Set(JSON.parse(localStorage.getItem('nyc-interests') || '[]')),
   plan: JSON.parse(localStorage.getItem('nyc-plan') || '[]'),
+  pendingPlanRemovals: new Set(JSON.parse(localStorage.getItem('nyc-pending-plan-removals') || '[]')),
   deviceId: localStorage.getItem('nyc-device-id') || crypto.randomUUID(),
   filters: { search: '', type: '', borough: '', area: '', status: 'all' },
   filtersOpen: false,
   decide: { near: false, borough: 'Manhattan', area: '', activity: 'cultura', time: 999, energy: 'cualquiera', setting: 'cualquiera' },
   visible: 24,
+  loadingCatalog: true,
   onlineData: false,
   message: null,
   detailId: null,
@@ -32,6 +34,7 @@ const hasCoords = item => Number.isFinite(Number(item.lat)) && Number.isFinite(N
 function saveLocal() {
   localStorage.setItem('nyc-interests', JSON.stringify([...state.interests]));
   localStorage.setItem('nyc-plan', JSON.stringify(state.plan));
+  localStorage.setItem('nyc-pending-plan-removals', JSON.stringify([...state.pendingPlanRemovals]));
 }
 
 async function loadSeed() {
@@ -85,11 +88,13 @@ async function loadRemote() {
   if (items.length) state.catalog = items;
   state.remoteInterests = payload.data.interests || [];
   state.remoteComments = payload.data.comments || [];
-  const remotePlan = (payload.data.itineraryItems || [])
+  const remotePlanIds = (payload.data.itineraryItems || [])
     .filter(item => !item.itineraryId || item.itineraryId === 'PLAN-FAMILIAR')
     .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
     .map(item => item.itemId)
     .filter(Boolean);
+  state.pendingPlanRemovals.forEach(itemId => { if (!remotePlanIds.includes(itemId)) state.pendingPlanRemovals.delete(itemId); });
+  const remotePlan = remotePlanIds.filter(itemId => !state.pendingPlanRemovals.has(itemId));
   state.plan = [...new Set(remotePlan)];
   saveLocal();
   state.onlineData = true;
@@ -260,6 +265,9 @@ function catalogFiltered() {
 }
 
 function renderCatalog() {
+  if (state.loadingCatalog) {
+    return `<section class="view active"><div class="section-head"><div><h2>Todo el catálogo</h2><p class="muted">Cargando catálogo familiar…</p></div><div class="catalog-toolbar"><button class="button primary" disabled>+ Añadir lugar</button></div></div><div class="panel empty loading-panel"><h3>Sincronizando con Google Sheets</h3><p class="muted">Estamos preparando la lista completa para que no veas cifras provisionales.</p></div></section>`;
+  }
   const types = unique(state.catalog.map(item => item.type));
   const boroughs = unique(state.catalog.map(item => item.borough));
   const areas = unique(state.catalog.filter(item => !state.filters.borough || item.borough === state.filters.borough).map(decisionArea));
@@ -313,7 +321,19 @@ function proposalForm() {
 
 function renderPlan() {
   const items = state.plan.map(id => state.catalog.find(item => item.id === id)).filter(Boolean);
-  return `<section class="view active"><div class="section-head"><div><h2>Plan familiar</h2><p class="muted">${items.length} ${items.length===1?'parada':'paradas'} · ${state.onlineData ? 'sincronizado con Google Sheets' : 'guardado en este dispositivo hasta sincronizar'}</p></div></div>${items.length ? `<div class="panel intro station-sign"><span class="station-kicker">Plan compartido</span><h3>Itinerario familiar</h3><p class="muted">Las paradas añadidas se guardan en el plan común cuando la sincronización está disponible.</p></div><div class="plan-list">${items.map((item,index) => `<article class="card plan-item"><div class="plan-position">${index+1}</div><div><h3>${escapeHtml(item.name)}</h3><p class="muted">${escapeHtml([item.area,item.timeNeeded].filter(Boolean).join(' · '))}</p></div><button class="button small danger" data-remove-plan="${escapeHtml(item.id)}">Quitar</button></article>`).join('')}</div><button class="button primary block" style="margin-top:14px" data-action="maps-plan">Abrir recorrido en Google Maps</button>` : `<div class="panel empty"><h3>El itinerario familiar está vacío</h3><p class="muted">Añade lugares desde Decidir o desde el catálogo. Si hay conexión, se guardarán en el plan común.</p><button class="button primary" data-view="decide">Buscar un plan</button></div>`}</section>`;
+  const pendingText = state.pendingPlanRemovals.size ? ` · ${state.pendingPlanRemovals.size} borrado${state.pendingPlanRemovals.size === 1 ? '' : 's'} pendiente${state.pendingPlanRemovals.size === 1 ? '' : 's'} de sincronizar` : '';
+  return `<section class="view active"><div class="section-head"><div><h2>Plan familiar</h2><p class="muted">${items.length} ${items.length===1?'parada':'paradas'} · ${state.onlineData ? 'sincronizado con Google Sheets' : 'guardado en este dispositivo hasta sincronizar'}${pendingText}</p></div></div>${items.length ? `<div class="panel intro station-sign"><span class="station-kicker">Plan compartido</span><h3>Itinerario familiar</h3><p class="muted">Las paradas añadidas o quitadas se guardan en el plan común cuando la sincronización está disponible.</p></div><div class="plan-list">${items.map((item,index) => `<article class="card plan-item"><div class="plan-position">${index+1}</div><div><h3>${escapeHtml(item.name)}</h3><p class="muted">${escapeHtml([item.area,item.timeNeeded].filter(Boolean).join(' · '))}</p></div><button class="button small danger" data-remove-plan="${escapeHtml(item.id)}">Quitar</button></article>`).join('')}</div><button class="button primary block" style="margin-top:14px" data-action="maps-plan">Abrir recorrido en Google Maps</button>` : `<div class="panel empty"><h3>El itinerario familiar está vacío</h3><p class="muted">Añade lugares desde Decidir o desde el catálogo. Si hay conexión, se guardarán en el plan común.</p><button class="button primary" data-view="decide">Buscar un plan</button></div>`}</section>`;
+}
+
+async function removeFromPlan(itemId) {
+  state.plan = state.plan.filter(id => id !== itemId);
+  state.pendingPlanRemovals.add(itemId);
+  state.message = { type: 'success', text: 'Parada quitada del itinerario. Se sincronizará con el plan familiar.' };
+  saveLocal();
+  render();
+  try {
+    await writeAction('removePlanItem', { deviceId: state.deviceId, itemId });
+  } catch {}
 }
 
 function openMapsPlan() {
@@ -359,15 +379,15 @@ function bindEvents() {
     }
   }));
   document.querySelectorAll('[data-interest]').forEach(button => button.addEventListener('click', async () => { const id = button.dataset.interest; state.interests.has(id) ? state.interests.delete(id) : state.interests.add(id); saveLocal(); render(); try { await writeAction('interest', { deviceId: state.deviceId, itemId: id, itemKind: state.catalog.find(item => item.id===id)?.itemKind || 'place', interested: state.interests.has(id) }); } catch {} }));
-  document.querySelectorAll('[data-remove-plan]').forEach(button => button.addEventListener('click', async () => { const id = button.dataset.removePlan; state.plan = state.plan.filter(itemId => itemId !== id); saveLocal(); render(); try { await writeAction('removePlanItem',{deviceId:state.deviceId,itemId:id}); } catch {} }));
-  document.querySelectorAll('[data-add-plan]').forEach(button => button.addEventListener('click', async () => { if (!state.plan.includes(button.dataset.addPlan)) state.plan.push(button.dataset.addPlan); saveLocal(); button.textContent='Añadido'; try { await writeAction('planItem',{deviceId:state.deviceId,itemId:button.dataset.addPlan,position:state.plan.length}); } catch {} }));
+  document.querySelectorAll('[data-remove-plan]').forEach(button => button.addEventListener('click', () => removeFromPlan(button.dataset.removePlan)));
+  document.querySelectorAll('[data-add-plan]').forEach(button => button.addEventListener('click', async () => { state.pendingPlanRemovals.delete(button.dataset.addPlan); if (!state.plan.includes(button.dataset.addPlan)) state.plan.push(button.dataset.addPlan); saveLocal(); button.textContent='Añadido'; try { await writeAction('planItem',{deviceId:state.deviceId,itemId:button.dataset.addPlan,position:state.plan.length}); } catch {} }));
   document.querySelector('[data-action="maps-plan"]')?.addEventListener('click', openMapsPlan);
   document.querySelector('#comment-form')?.addEventListener('submit', submitComment);
 }
 
 function bindResultEvents() {
   document.querySelector('[data-action="relax"]')?.addEventListener('click', () => { state.decide.time=999; state.decide.energy='cualquiera'; state.decide.setting='cualquiera'; render(); });
-  document.querySelectorAll('[data-add-plan]').forEach(button => button.addEventListener('click', async () => { if (!state.plan.includes(button.dataset.addPlan)) state.plan.push(button.dataset.addPlan); saveLocal(); button.textContent='Añadido'; try { await writeAction('planItem',{deviceId:state.deviceId,itemId:button.dataset.addPlan,position:state.plan.length}); } catch {} }));
+  document.querySelectorAll('[data-add-plan]').forEach(button => button.addEventListener('click', async () => { state.pendingPlanRemovals.delete(button.dataset.addPlan); if (!state.plan.includes(button.dataset.addPlan)) state.plan.push(button.dataset.addPlan); saveLocal(); button.textContent='Añadido'; try { await writeAction('planItem',{deviceId:state.deviceId,itemId:button.dataset.addPlan,position:state.plan.length}); } catch {} }));
   document.querySelectorAll('#recommendations [data-detail]').forEach(button => button.addEventListener('click', () => { state.detailId = button.dataset.detail; state.view = 'detail'; state.message = null; render(); window.scrollTo({top:0,behavior:'smooth'}); }));
 }
 
@@ -414,7 +434,15 @@ async function start() {
   try {
     state.catalog = await loadSeed();
     render();
-    try { await loadRemote(); render(); } catch (error) { state.message = {type:'error',text:`Usando la copia local: ${error.message}`}; render(); }
+    try {
+      await loadRemote();
+      state.loadingCatalog = false;
+      render();
+    } catch (error) {
+      state.loadingCatalog = false;
+      state.message = {type:'error',text:`Usando la copia local: ${error.message}`};
+      render();
+    }
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
   } catch (error) {
     app.innerHTML = `<main class="shell"><div class="panel empty"><h1>No se pudo abrir la guía</h1><p>${escapeHtml(error.message)}</p></div></main>`;
