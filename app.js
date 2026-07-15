@@ -26,12 +26,14 @@ const app = document.querySelector('#app');
 const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
 const normalize = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const slug = value => normalize(value).replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+const itemKey = value => String(value ?? '').trim();
 const unique = values => [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
 const familyCount = itemId => state.remoteInterests?.filter(item => item.itemId === itemId && String(item.interested).toLowerCase() !== 'false').length || (state.interests.has(itemId) ? 1 : 0);
 const decisionArea = item => item.simpleArea || item.macroArea || item.decisionArea || item.cluster || item.area || '';
 const hasCoords = item => Number.isFinite(Number(item.lat)) && Number.isFinite(Number(item.lng));
 
 function saveLocal() {
+  state.plan = [...new Set(state.plan.map(itemKey).filter(Boolean))];
   localStorage.setItem('nyc-interests', JSON.stringify([...state.interests]));
   localStorage.setItem('nyc-plan', JSON.stringify(state.plan));
   localStorage.setItem('nyc-pending-plan-removals', JSON.stringify([...state.pendingPlanRemovals]));
@@ -91,7 +93,7 @@ async function loadRemote() {
   const remotePlanIds = (payload.data.itineraryItems || [])
     .filter(item => !item.itineraryId || item.itineraryId === 'PLAN-FAMILIAR')
     .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
-    .map(item => item.itemId)
+    .map(item => itemKey(item.itemId))
     .filter(Boolean);
   state.pendingPlanRemovals.forEach(itemId => { if (!remotePlanIds.includes(itemId)) state.pendingPlanRemovals.delete(itemId); });
   const remotePlan = remotePlanIds.filter(itemId => !state.pendingPlanRemovals.has(itemId));
@@ -320,24 +322,25 @@ function proposalForm() {
 }
 
 function renderPlan() {
-  const items = state.plan.map(id => state.catalog.find(item => item.id === id)).filter(Boolean);
+  const items = state.plan.map(id => state.catalog.find(item => itemKey(item.id) === itemKey(id))).filter(Boolean);
   const pendingText = state.pendingPlanRemovals.size ? ` · ${state.pendingPlanRemovals.size} borrado${state.pendingPlanRemovals.size === 1 ? '' : 's'} pendiente${state.pendingPlanRemovals.size === 1 ? '' : 's'} de sincronizar` : '';
   return `<section class="view active"><div class="section-head"><div><h2>Plan familiar</h2><p class="muted">${items.length} ${items.length===1?'parada':'paradas'} · ${state.onlineData ? 'sincronizado con Google Sheets' : 'guardado en este dispositivo hasta sincronizar'}${pendingText}</p></div></div>${items.length ? `<div class="panel intro station-sign"><span class="station-kicker">Plan compartido</span><h3>Itinerario familiar</h3><p class="muted">Las paradas añadidas o quitadas se guardan en el plan común cuando la sincronización está disponible.</p></div><div class="plan-list">${items.map((item,index) => `<article class="card plan-item"><div class="plan-position">${index+1}</div><div><h3>${escapeHtml(item.name)}</h3><p class="muted">${escapeHtml([item.area,item.timeNeeded].filter(Boolean).join(' · '))}</p></div><button class="button small danger" data-remove-plan="${escapeHtml(item.id)}">Quitar</button></article>`).join('')}</div><button class="button primary block" style="margin-top:14px" data-action="maps-plan">Abrir recorrido en Google Maps</button>` : `<div class="panel empty"><h3>El itinerario familiar está vacío</h3><p class="muted">Añade lugares desde Decidir o desde el catálogo. Si hay conexión, se guardarán en el plan común.</p><button class="button primary" data-view="decide">Buscar un plan</button></div>`}</section>`;
 }
 
 async function removeFromPlan(itemId) {
-  state.plan = state.plan.filter(id => id !== itemId);
-  state.pendingPlanRemovals.add(itemId);
+  const id = itemKey(itemId);
+  state.plan = state.plan.filter(planId => itemKey(planId) !== id);
+  state.pendingPlanRemovals.add(id);
   state.message = { type: 'success', text: 'Parada quitada del itinerario. Se sincronizará con el plan familiar.' };
   saveLocal();
   render();
   try {
-    await writeAction('removePlanItem', { deviceId: state.deviceId, itemId });
+    await writeAction('removePlanItem', { deviceId: state.deviceId, itemId: id });
   } catch {}
 }
 
 function openMapsPlan() {
-  const items = state.plan.map(id => state.catalog.find(item => item.id === id)).filter(item => item?.lat && item?.lng);
+  const items = state.plan.map(id => state.catalog.find(item => itemKey(item.id) === itemKey(id))).filter(item => item?.lat && item?.lng);
   if (!items.length) {
     state.message = { type: 'error', text: 'No hay lugares con coordenadas en el itinerario.' };
     render();
@@ -380,14 +383,14 @@ function bindEvents() {
   }));
   document.querySelectorAll('[data-interest]').forEach(button => button.addEventListener('click', async () => { const id = button.dataset.interest; state.interests.has(id) ? state.interests.delete(id) : state.interests.add(id); saveLocal(); render(); try { await writeAction('interest', { deviceId: state.deviceId, itemId: id, itemKind: state.catalog.find(item => item.id===id)?.itemKind || 'place', interested: state.interests.has(id) }); } catch {} }));
   document.querySelectorAll('[data-remove-plan]').forEach(button => button.addEventListener('click', () => removeFromPlan(button.dataset.removePlan)));
-  document.querySelectorAll('[data-add-plan]').forEach(button => button.addEventListener('click', async () => { state.pendingPlanRemovals.delete(button.dataset.addPlan); if (!state.plan.includes(button.dataset.addPlan)) state.plan.push(button.dataset.addPlan); saveLocal(); button.textContent='Añadido'; try { await writeAction('planItem',{deviceId:state.deviceId,itemId:button.dataset.addPlan,position:state.plan.length}); } catch {} }));
+  document.querySelectorAll('[data-add-plan]').forEach(button => button.addEventListener('click', async () => { const id = itemKey(button.dataset.addPlan); state.pendingPlanRemovals.delete(id); if (!state.plan.some(planId => itemKey(planId) === id)) state.plan.push(id); saveLocal(); button.textContent='Añadido'; try { await writeAction('planItem',{deviceId:state.deviceId,itemId:id,position:state.plan.length}); } catch {} }));
   document.querySelector('[data-action="maps-plan"]')?.addEventListener('click', openMapsPlan);
   document.querySelector('#comment-form')?.addEventListener('submit', submitComment);
 }
 
 function bindResultEvents() {
   document.querySelector('[data-action="relax"]')?.addEventListener('click', () => { state.decide.time=999; state.decide.energy='cualquiera'; state.decide.setting='cualquiera'; render(); });
-  document.querySelectorAll('[data-add-plan]').forEach(button => button.addEventListener('click', async () => { state.pendingPlanRemovals.delete(button.dataset.addPlan); if (!state.plan.includes(button.dataset.addPlan)) state.plan.push(button.dataset.addPlan); saveLocal(); button.textContent='Añadido'; try { await writeAction('planItem',{deviceId:state.deviceId,itemId:button.dataset.addPlan,position:state.plan.length}); } catch {} }));
+  document.querySelectorAll('[data-add-plan]').forEach(button => button.addEventListener('click', async () => { const id = itemKey(button.dataset.addPlan); state.pendingPlanRemovals.delete(id); if (!state.plan.some(planId => itemKey(planId) === id)) state.plan.push(id); saveLocal(); button.textContent='Añadido'; try { await writeAction('planItem',{deviceId:state.deviceId,itemId:id,position:state.plan.length}); } catch {} }));
   document.querySelectorAll('#recommendations [data-detail]').forEach(button => button.addEventListener('click', () => { state.detailId = button.dataset.detail; state.view = 'detail'; state.message = null; render(); window.scrollTo({top:0,behavior:'smooth'}); }));
 }
 
