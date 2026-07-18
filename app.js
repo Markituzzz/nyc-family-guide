@@ -191,11 +191,18 @@ function activityFor(item) {
     if (/shopping|compras/.test(text)) return 'compras';
     return 'cultura';
   }
-  const text = normalize(`${item.type} ${item.subtype} ${item.category}`);
+  const text = normalize(`${item.type} ${item.subtype} ${item.category} ${item.name} ${item.shortDescription} ${item.whyItMatters} ${item.notes}`);
   if (/gastronom|restaurante|pizza|comida|mercado|panader/.test(text)) return 'comida';
   if (/compra|tienda|outlet|shopping/.test(text)) return 'compras';
   if (/museo|cultura|mirador|iglesia|arte|historia|observatory/.test(text)) return 'cultura';
   return 'paseo';
+}
+
+function isUnclassifiedFamilyProposal(item) {
+  if (item.origin !== 'family') return false;
+  const text = normalize(`${item.type} ${item.category}`);
+  return /propuesto por la familia|propuesta familiar/.test(text)
+    && !/gastronom|comida|compr|cultura|ocio|paseo|zona|mirador|museo|parque/.test(text);
 }
 
 function activityIcon(activity) {
@@ -506,7 +513,7 @@ function decideMatches() {
     if (d.near && state.userLocation && !hasCoords(item)) return false;
     if (!d.near && d.borough && item.borough && item.borough !== d.borough) return false;
     if (!d.near && d.area && decisionArea(item) !== d.area) return false;
-    if (activityFor(item) !== d.activity) return false;
+    if (activityFor(item) !== d.activity && !isUnclassifiedFamilyProposal(item)) return false;
     if (d.time < 999 && item.maxMinutes && Number(item.maxMinutes) > d.time) return false;
     if (d.energy === 'bajo' && normalize(item.energyLevel) && normalize(item.energyLevel) !== 'bajo') return false;
     if (!matchesSetting(item, d.setting)) return false;
