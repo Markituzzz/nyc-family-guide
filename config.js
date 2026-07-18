@@ -1,5 +1,5 @@
 window.NYC_CONFIG = {
-  apiUrl: 'https://script.google.com/macros/s/AKfycbx0KToGfL_jn_m14vLTuTuJe6ly5-VD_68gC60icu6ekRADkmHZOws_sgNaXTs3qvyQ/exec',
+  apiUrl: 'https://script.google.com/macros/s/AKfycbxh1lQ96s0BRIX5LYOHSGEmxbNuNeVibWzgnlKnn7cePyimDB3_jt6PUa6nOhQVVrA/exec',
   familyKey: '',
   familySize: 4,
   sheetUrl: 'https://docs.google.com/spreadsheets/d/1WaotDKkqltUQlrPKYuo7ZupEIKUF27tuklrGcSe4brM/edit'

@@ -1,4 +1,5 @@
 const SPREADSHEET_ID = '1WaotDKkqltUQlrPKYuo7ZupEIKUF27tuklrGcSe4brM';
+const APP_SCRIPT_VERSION = '20260718-activities-v2';
 const SHEETS = {
   places: 'Lugares', experiences: 'Experiencias', interests: 'Intereses', proposals: 'PropuestasFamilia',
   comments: 'Comentarios', itineraries: 'Itinerarios', itineraryItems: 'ItinerarioItems',
@@ -10,7 +11,7 @@ function doGet(e) {
   try {
     assertFamilyKey_(params.key);
     const action = params.action || 'health';
-    const data = action === 'snapshot' ? getSnapshot_() : action === 'health' ? { status: 'ok', timestamp: new Date().toISOString() } : null;
+    const data = action === 'snapshot' ? getSnapshot_() : action === 'diagnostics' ? getDiagnostics_() : action === 'health' ? { status: 'ok', version: APP_SCRIPT_VERSION, timestamp: new Date().toISOString() } : null;
     if (!data) throw new Error('Accion no disponible.');
     return output_(params, { ok: true, data: data });
   } catch (error) { return output_(params, { ok: false, error: error.message }); }
@@ -42,7 +43,24 @@ function getSnapshot_() {
     activities: readPublished_(SHEETS.activities),
     interests: readObjects_(SHEETS.interests), proposals: readPublished_(SHEETS.proposals),
     comments: readObjects_(SHEETS.comments), itineraries: readObjects_(SHEETS.itineraries),
-    itineraryItems: readObjects_(SHEETS.itineraryItems), generatedAt: new Date().toISOString()
+    itineraryItems: readObjects_(SHEETS.itineraryItems), version: APP_SCRIPT_VERSION, generatedAt: new Date().toISOString()
+  };
+}
+
+function getDiagnostics_() {
+  const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheetNames = spreadsheet.getSheets().map(function(sheet) { return sheet.getName(); });
+  const activitiesSheet = spreadsheet.getSheetByName(SHEETS.activities);
+  return {
+    status: 'ok',
+    version: APP_SCRIPT_VERSION,
+    spreadsheetId: SPREADSHEET_ID,
+    configuredActivitiesSheet: SHEETS.activities,
+    hasActivitiesSheet: Boolean(activitiesSheet),
+    activitiesRows: activitiesSheet ? Math.max(0, activitiesSheet.getLastRow() - 1) : 0,
+    activitiesColumns: activitiesSheet ? activitiesSheet.getLastColumn() : 0,
+    sheetNames: sheetNames,
+    timestamp: new Date().toISOString()
   };
 }
 
