@@ -133,11 +133,43 @@ function selectOptions(values, selected, emptyLabel) {
   return `<option value="">${emptyLabel}</option>${values.map(value => `<option value="${escapeHtml(value)}" ${value === selected ? 'selected' : ''}>${escapeHtml(value)}</option>`).join('')}`;
 }
 
+function humanize(value) {
+  return String(value || '')
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/(^|\s)\S/g, letter => letter.toUpperCase());
+}
+
+function activityLabel(value) {
+  const labels = {
+    actividad_urbana: 'Actividad urbana',
+    bienestar: 'Bienestar',
+    cine: 'Cine',
+    danza: 'Danza',
+    deporte: 'Deporte',
+    familia: 'Familia',
+    gastronomia: 'Gastronomía',
+    mercado: 'Mercado',
+    musica: 'Música',
+    alternativa: 'Alternativa',
+    backup: 'Backup',
+    cerca_si_encaja: 'Cerca si encaja',
+    principal: 'Principal',
+    solo_si_zona: 'Solo si zona'
+  };
+  return labels[value] || humanize(value);
+}
+
+function activitySelectOptions(values, selected, emptyLabel) {
+  return `<option value="">${emptyLabel}</option>${values.map(value => `<option value="${escapeHtml(value)}" ${value === selected ? 'selected' : ''}>${escapeHtml(activityLabel(value))}</option>`).join('')}`;
+}
+
 function activityFor(item) {
   if (item.itemKind === 'activity') {
-    const text = normalize(`${item.category} ${item.type}`);
-    if (/mercado|food|comida|gastronom/.test(text)) return 'comida';
-    if (/deporte|calle|publico|paseo/.test(text)) return 'paseo';
+    const text = slug(`${item.category} ${item.subcategory} ${item.type} ${item.name}`);
+    if (/mercado|food|comida|gastronom|pop_up/.test(text)) return 'comida';
+    if (/deporte|baseball|yankees|calle|publico|paseo|actividad_urbana|calles_abiertas|bienestar|matinal/.test(text)) return 'paseo';
     if (/shopping|compras/.test(text)) return 'compras';
     return 'cultura';
   }
@@ -162,23 +194,27 @@ function visualCardHead(item) {
 }
 
 function calendarIcon(item) {
-  const text = normalize(`${item.category} ${item.type} ${item.name}`);
-  if (/musica|concert|festival|guitar|opera|jazz|salsa|dance floor/.test(text)) return '🎵';
+  const text = slug(`${item.category} ${item.subcategory} ${item.type} ${item.name}`);
+  if (/musica|concert|festival|guitar|opera|jazz|salsa|dance_floor|piano|singalong|hip_hop|reggae|rnb|bhangra/.test(text)) return '🎵';
   if (/cine|movie|film/.test(text)) return '🎬';
   if (/deporte|yankees|baseball|streets|bike|bici/.test(text)) return '⚾';
-  if (/mercado|market|greenmarket|smorgasburg|vendors|food/.test(text)) return '🍴';
-  if (/danza|baile|dance/.test(text)) return '💃';
+  if (/mercado|market|greenmarket|smorgasburg|vendors|food|gastronomia|pop_up/.test(text)) return '🍴';
+  if (/danza|baile|dance|ballroom/.test(text)) return '💃';
+  if (/bienestar|matinal/.test(text)) return '🌿';
+  if (/actividad_urbana|calles_abiertas|festival_comunitario/.test(text)) return '🌆';
   if (/familia|kids|children|terrestrials/.test(text)) return '🎈';
   return '🎟️';
 }
 
 function calendarBadge(item) {
-  const text = normalize(`${item.category} ${item.type} ${item.name}`);
+  const text = slug(`${item.category} ${item.subcategory} ${item.type} ${item.name}`);
   if (/musica|concert|festival|guitar|opera|jazz|salsa/.test(text)) return '♪';
   if (/cine|movie|film/.test(text)) return '▶';
   if (/deporte|yankees|baseball/.test(text)) return '⚾';
   if (/mercado|market|greenmarket|smorgasburg|vendors|food/.test(text)) return '🍴';
   if (/danza|baile|dance/.test(text)) return '★';
+  if (/bienestar|matinal/.test(text)) return '☘';
+  if (/actividad_urbana|calles_abiertas/.test(text)) return 'NY';
   if (/familia|kids|children|terrestrials/.test(text)) return 'F';
   return 'T';
 }
@@ -338,6 +374,10 @@ function activitySortValue(item) {
   return `${item.startDate || '9999-99-99'} ${item.startTime || '99:99'}`;
 }
 
+function activityTimeSortValue(item) {
+  return `${item.startTime || '99:99'} ${item.endTime || '99:99'} ${item.name || ''}`;
+}
+
 function activityScore(item) {
   const priority = { alta: 3, media: 2, baja: 1 }[normalize(item.priority)] || 1;
   const fit = { 'muy alta': 4, alta: 3, media: 2, baja: 1 }[normalize(item.familyFit)] || 1;
@@ -389,7 +429,9 @@ function groupedActivities(items) {
     .map(([key, groupItems]) => ({
       key,
       label: activityDateHeading(key),
-      items: groupItems.sort((a, b) => activityScore(b) - activityScore(a) || activitySortValue(a).localeCompare(activitySortValue(b)))
+      items: groupItems.sort((a, b) => state.todayView === 'calendar'
+        ? activityTimeSortValue(a).localeCompare(activityTimeSortValue(b))
+        : activityScore(b) - activityScore(a) || activitySortValue(a).localeCompare(activitySortValue(b)))
     }));
 }
 
@@ -470,7 +512,10 @@ function activityCard(item) {
   const ticketUrl = item.ticketUrl || '';
   const infoUrl = ticketUrl || item.officialUrl || '';
   const reservation = item.reservationRequired ? String(item.reservationRequired) : '';
-  return `<article class="card activity-card type-${activityFor(item)}">${calendarCardHead(item)}<div class="activity-main"><div class="badge-row"><span class="badge accent">${escapeHtml(formatActivityDate(item))}</span>${activityTime(item) ? `<span class="badge time-badge">${escapeHtml(activityTime(item))}</span>` : ''}${item.price ? `<span class="badge price-badge">${escapeHtml(item.price)}</span>` : ''}${reservation ? `<span class="badge reserve-badge">${escapeHtml(reservation === 'Sí' ? 'Reserva necesaria' : reservation === 'Opcional' ? 'Reserva opcional' : 'Sin reserva')}</span>` : ''}<span class="badge family">${familyCount(item.id)} de ${CONFIG.familySize || 4} interesados</span>${item.distanceKm != null ? `<span class="badge distance">${escapeHtml(formatDistance(item.distanceKm))}</span>` : ''}</div><h3>${escapeHtml(item.name)}</h3><p class="muted">${escapeHtml([item.category, item.area, item.borough].filter(Boolean).join(' · '))}</p>${item.notes ? `<p class="activity-note">${escapeHtml(item.notes)}</p>` : ''}<div class="actions"><button class="button interest-button ${state.interests.has(item.id)?'selected':''}" data-interest="${escapeHtml(item.id)}">${state.interests.has(item.id)?'Interesado':'Me interesa'}</button><button class="button primary" data-add-plan="${escapeHtml(item.id)}">Añadir al plan</button><button class="button" data-detail="${escapeHtml(item.id)}">Ver ficha</button>${infoUrl ? `<a class="button" href="${escapeHtml(infoUrl)}" target="_blank" rel="noopener">${ticketUrl ? 'Entradas / RSVP' : 'Web oficial'}</a>` : ''}${item.mapsUrl ? `<a class="button" href="${escapeHtml(item.mapsUrl)}" target="_blank" rel="noopener">Maps</a>` : ''}</div></div></article>`;
+  const meta = [activityLabel(item.category), activityLabel(item.subcategory), item.area, item.borough].filter(Boolean).join(' · ');
+  const planBadge = item.planRole ? `<span class="badge">${escapeHtml(activityLabel(item.planRole))}</span>` : '';
+  const priorityBadge = item.priority ? `<span class="badge ${normalize(item.priority) === 'alta' ? 'accent' : ''}">Prioridad ${escapeHtml(activityLabel(item.priority).toLowerCase())}</span>` : '';
+  return `<article class="card activity-card type-${activityFor(item)}">${calendarCardHead(item)}<div class="activity-main"><div class="badge-row"><span class="badge accent">${escapeHtml(formatActivityDate(item))}</span>${activityTime(item) ? `<span class="badge time-badge">${escapeHtml(activityTime(item))}</span>` : ''}${item.price ? `<span class="badge price-badge">${escapeHtml(item.price)}</span>` : ''}${reservation ? `<span class="badge reserve-badge">${escapeHtml(reservation === 'Sí' ? 'Reserva necesaria' : reservation === 'Opcional' ? 'Reserva opcional' : 'Sin reserva')}</span>` : ''}${planBadge}${priorityBadge}<span class="badge family">${familyCount(item.id)} de ${CONFIG.familySize || 4} interesados</span>${item.distanceKm != null ? `<span class="badge distance">${escapeHtml(formatDistance(item.distanceKm))}</span>` : ''}</div><h3>${escapeHtml(item.name)}</h3><p class="muted">${escapeHtml(meta)}</p>${item.notes ? `<p class="activity-note">${escapeHtml(item.notes)}</p>` : ''}<div class="actions"><button class="button interest-button ${state.interests.has(item.id)?'selected':''}" data-interest="${escapeHtml(item.id)}">${state.interests.has(item.id)?'Interesado':'Me interesa'}</button><button class="button primary" data-add-plan="${escapeHtml(item.id)}">Añadir al plan</button><button class="button" data-detail="${escapeHtml(item.id)}">Ver ficha</button>${infoUrl ? `<a class="button" href="${escapeHtml(infoUrl)}" target="_blank" rel="noopener">${ticketUrl ? 'Entradas / RSVP' : 'Web oficial'}</a>` : ''}${item.mapsUrl ? `<a class="button" href="${escapeHtml(item.mapsUrl)}" target="_blank" rel="noopener">Maps</a>` : ''}</div></div></article>`;
 }
 
 function renderToday() {
@@ -498,7 +543,7 @@ function renderToday() {
       <button class="today-chip ${state.todayMode === 'upcoming' ? 'active' : ''}" data-today-mode="upcoming">Próximos</button>
       <button class="today-chip ${state.todayMode === 'near' ? 'active' : ''}" data-action="today-near" ${state.locating ? 'disabled' : ''}>${state.locating ? 'Buscando…' : 'Cerca de mí'}</button>
     </div>
-    <div class="today-filters"><label>Tipo de actividad<select data-today-filter="type">${selectOptions(types,state.todayFilters.type,'Todos los tipos')}</select></label><label>Fecha<select data-today-filter="date">${dateOptions}</select></label>${state.todayFilters.type || state.todayFilters.date ? '<button class="button" data-action="clear-today-filters">Limpiar filtros</button>' : ''}</div>
+    <div class="today-filters"><label>Tipo de actividad<select data-today-filter="type">${activitySelectOptions(types,state.todayFilters.type,'Todos los tipos')}</select></label><label>Fecha<select data-today-filter="date">${dateOptions}</select></label>${state.todayFilters.type || state.todayFilters.date ? '<button class="button" data-action="clear-today-filters">Limpiar filtros</button>' : ''}</div>
     ${items.length ? `<div class="activity-calendar">${groups.map(group => `<section class="activity-day"><div class="activity-day-head"><h3>${escapeHtml(group.label)}</h3><span class="badge">${group.items.length}</span></div><div class="activity-list">${group.items.map(activityCard).join('')}</div></section>`).join('')}</div>` : `<div class="panel empty"><h3>${state.activitiesSynced ? state.todayView === 'calendar' ? 'Todavía no hay actividades en tu calendario' : 'No hay nada para este filtro' : 'Falta sincronizar el calendario'}</h3><p class="muted">${!state.activitiesSynced ? 'La pestaña existe y tiene datos, pero la versión publicada del Apps Script aún no los está enviando a la web.' : state.todayView === 'calendar' ? 'Añade actividades al plan desde la agenda completa y aparecerán aquí agrupadas por fecha.' : state.todayMode === 'today' ? 'Durante el viaje esta vista enseñará sólo lo que encaje con la fecha del día. Puedes mirar “Todo” para ver el calendario completo y votar con antelación.' : 'Prueba con otro filtro o revisa que las actividades tengan fecha y coordenadas.'}</p><button class="button primary" data-today-view="${state.todayView === 'calendar' ? 'agenda' : 'calendar'}">${state.todayView === 'calendar' ? 'Ver agenda completa' : 'Ver mi calendario'}</button></div>`}
   </section>`;
 }
@@ -547,11 +592,11 @@ function renderDetail() {
   const externalRating = item.rating ? `<div class="rating-block"><strong>${escapeHtml(item.rating)}</strong><span>${escapeHtml(item.reviews ? `${Number(item.reviews).toLocaleString('es-ES')} opiniones` : 'Valoración externa')}</span></div>` : '';
   const km = distanceKm(item);
   return `<section class="view active detail-view"><button class="back-link" data-action="back-detail">← Volver</button>
-    <header class="detail-hero type-${activityFor(item)}"><div><div class="badge-row"><span class="subway-bullet">${routeBadge(activityFor(item))}</span><span class="badge accent">${escapeHtml(item.type || item.itemKind)}</span>${item.origin === 'family' ? '<span class="badge">Propuesto por la familia</span>' : ''}</div><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml([item.area,item.borough].filter(Boolean).join(' · '))}</p></div><div class="detail-monogram" aria-hidden="true"><span>${activityIcon(activityFor(item))}</span><small>${escapeHtml(item.name.slice(0,2).toUpperCase())}</small></div></header>
+    <header class="detail-hero type-${activityFor(item)}"><div><div class="badge-row"><span class="subway-bullet">${routeBadge(activityFor(item))}</span><span class="badge accent">${escapeHtml(item.itemKind === 'activity' ? activityLabel(item.category || item.type) : item.type || item.itemKind)}</span>${item.subcategory ? `<span class="badge">${escapeHtml(activityLabel(item.subcategory))}</span>` : ''}${item.origin === 'family' ? '<span class="badge">Propuesto por la familia</span>' : ''}</div><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml([item.area,item.borough].filter(Boolean).join(' · '))}</p></div><div class="detail-monogram" aria-hidden="true"><span>${item.itemKind === 'activity' ? calendarIcon(item) : activityIcon(activityFor(item))}</span><small>${escapeHtml(item.name.slice(0,2).toUpperCase())}</small></div></header>
     <div class="detail-actions"><button class="button primary" data-add-plan="${escapeHtml(item.id)}">Añadir al itinerario</button><button class="button interest-button ${state.interests.has(item.id)?'selected':''}" data-interest="${escapeHtml(item.id)}">${state.interests.has(item.id)?'Me interesa':'Me gustaría ir'}</button>${item.mapsUrl ? `<a class="button" href="${escapeHtml(item.mapsUrl)}" target="_blank" rel="noopener">Abrir en Maps</a>` : ''}${item.ticketUrl ? `<a class="button" href="${escapeHtml(item.ticketUrl)}" target="_blank" rel="noopener">Entradas / RSVP</a>` : ''}${item.officialUrl ? `<a class="button" href="${escapeHtml(item.officialUrl)}" target="_blank" rel="noopener">Web oficial</a>` : ''}</div>
     <div class="detail-layout"><div class="detail-main">
       <section class="detail-section"><p class="detail-lead">${escapeHtml(description)}</p>${context && context !== description ? `<p>${escapeHtml(context)}</p>` : ''}</section>
-      <section class="detail-section"><h3>Información práctica</h3><dl class="facts-list">${detailFact('Fecha', item.itemKind === 'activity' ? formatActivityDate(item) : '')}${detailFact('Hora', activityTime(item))}${detailFact('Distancia',formatDistance(km))}${detailFact('Duración',item.timeNeeded || (item.idealMinutes ? `${item.idealMinutes} min` : ''))}${detailFact('Precio',item.price || item.costLevel)}${detailFact('Mejor momento',item.bestMoment)}${detailFact('Entorno',item.setting || item.weatherFit)}${detailFact('Energía',item.energyLevel)}${detailFact('Reserva',item.reservationRequired || item.reservationStatus)}${detailFact('Dirección',item.address)}${detailFact('Última comprobación',item.lastChecked)}</dl></section>
+      <section class="detail-section"><h3>Información práctica</h3><dl class="facts-list">${detailFact('Categoría', item.itemKind === 'activity' ? activityLabel(item.category) : item.category)}${detailFact('Subcategoría', item.itemKind === 'activity' ? activityLabel(item.subcategory) : item.subtype)}${detailFact('Fecha', item.itemKind === 'activity' ? formatActivityDate(item) : '')}${detailFact('Hora', activityTime(item))}${detailFact('Recurrencia', item.recurrence ? activityLabel(item.recurrence) : '')}${detailFact('Distancia',formatDistance(km))}${detailFact('Duración',item.timeNeeded || (item.idealMinutes ? `${item.idealMinutes} min` : ''))}${detailFact('Precio',item.price || item.costLevel)}${detailFact('Mejor momento',item.bestMoment)}${detailFact('Encaje familiar',item.familyFit)}${detailFact('Encaje teen',item.teenFit)}${detailFact('Clima',item.weatherFit)}${detailFact('Prioridad',item.priority ? activityLabel(item.priority) : '')}${detailFact('Rol en plan',item.planRole ? activityLabel(item.planRole) : '')}${detailFact('Entorno',item.setting)}${detailFact('Energía',item.energyLevel)}${detailFact('Reserva',item.reservationRequired || item.reservationStatus)}${detailFact('Dirección',item.address)}${detailFact('Última comprobación',item.lastChecked)}</dl></section>
       ${item.notes ? `<section class="detail-section"><h3>Conviene saber</h3><p>${escapeHtml(item.notes)}</p></section>` : ''}
       <section class="detail-section"><div class="comments-head"><div><h3>Comentarios familiares</h3><p class="muted">Consejos y opiniones compartidos durante la preparación y el viaje.</p></div><span class="badge family">${comments.length}</span></div>${comments.length ? `<div class="comments-list">${comments.map(comment => `<article class="family-comment"><span class="comment-type">${escapeHtml(comment.commentType || 'comentario')}</span><p>${escapeHtml(comment.text)}</p><time>${escapeHtml(formatDate(comment.createdAt))}</time></article>`).join('')}</div>` : '<p class="muted">Todavía no hay comentarios.</p>'}
       <form id="comment-form" class="comment-form"><label>Tipo<select name="commentType"><option value="consejo">Consejo</option><option value="opinión">Opinión</option><option value="aviso">Aviso</option></select></label><label>Comentario<textarea name="text" required maxlength="600" rows="3" placeholder="Añade algo útil para la familia"></textarea></label><button class="button primary" type="submit">Publicar comentario</button></form></section>
