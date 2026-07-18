@@ -267,8 +267,9 @@ function placeIcon(item) {
   const rawText = `${item.type} ${item.subtype} ${item.category} ${item.name} ${item.shortDescription} ${item.whyItMatters} ${item.notes}`;
   const text = normalize(rawText);
   const slugText = slug(rawText);
-  if (activityFor(item) === 'compras') return activityIcon('compras');
-  if (activityFor(item) === 'comida') return activityIcon('comida');
+  const visibleType = normalize(inferredTypeLabel(item));
+  if (/compras|shopping|outlet|tienda/.test(visibleType) || activityFor(item) === 'compras') return activityIcon('compras');
+  if (/gastronom|comida|restaurante/.test(visibleType) || activityFor(item) === 'comida') return activityIcon('comida');
   if (/(^|_)musica($|_)|(^|_)jazz($|_)|(^|_)club($|_)|(^|_)venue($|_)|(^|_)concierto($|_)|(^|_)rock($|_)|(^|_)opera($|_)/.test(slugText)) return '🎵';
   if (/(^|_)cine($|_)|(^|_)movie($|_)|(^|_)film($|_)/.test(slugText)) return '🎬';
   if (/(^|_)teatro($|_)|(^|_)broadway($|_)|(^|_)show($|_)/.test(slugText)) return '🎭';
