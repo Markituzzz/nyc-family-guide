@@ -268,6 +268,8 @@ function placeIcon(item) {
   const text = normalize(rawText);
   const slugText = slug(rawText);
   const visibleType = normalize(inferredTypeLabel(item));
+  if (/(^|_)flea($|_)|(^|_)vintage($|_)|(^|_)diseno($|_)|(^|_)diseño($|_)|(^|_)mercado($|_)/.test(slugText) && /compras|shopping/.test(visibleType)) return '🧺';
+  if (/(^|_)mall($|_)|(^|_)centro_comercial($|_)|(^|_)gardens($|_)/.test(slugText) && /compras|shopping|outlet/.test(visibleType)) return '🏬';
   if (/compras|shopping|outlet|tienda/.test(visibleType) || activityFor(item) === 'compras') return activityIcon('compras');
   if (/gastronom|comida|restaurante/.test(visibleType) || activityFor(item) === 'comida') return activityIcon('comida');
   if (/(^|_)musica($|_)|(^|_)jazz($|_)|(^|_)club($|_)|(^|_)venue($|_)|(^|_)concierto($|_)|(^|_)rock($|_)|(^|_)opera($|_)/.test(slugText)) return '🎵';
