@@ -1,7 +1,7 @@
 const CONFIG = window.NYC_CONFIG || {};
 const state = {
   view: 'catalog',
-  mode: 'preparation',
+  mode: localStorage.getItem('nyc-mode-override') || 'preparation',
   catalog: [],
   activities: [],
   interests: new Set(JSON.parse(localStorage.getItem('nyc-interests') || '[]')),
@@ -10,6 +10,7 @@ const state = {
   deviceId: localStorage.getItem('nyc-device-id') || crypto.randomUUID(),
   filters: { search: '', type: '', borough: '', area: '', status: 'all' },
   todayFilters: { type: '', date: '' },
+  todayView: 'agenda',
   todayMode: 'all',
   filtersOpen: false,
   decide: { near: false, borough: 'Manhattan', area: '', activity: 'cultura', time: 999, energy: 'cualquiera', setting: 'cualquiera' },
@@ -286,6 +287,23 @@ function dateKey(date) {
   return date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` : '';
 }
 
+function isTripDate(date = new Date()) {
+  const start = parseDateOnly(CONFIG.tripStart);
+  const end = parseDateOnly(CONFIG.tripEnd);
+  const current = parseDateOnly(dateKey(date));
+  return Boolean(start && end && current >= start && current <= end);
+}
+
+function applyAutomaticMode() {
+  if (localStorage.getItem('nyc-mode-override')) return;
+  state.mode = isTripDate() ? 'trip' : 'preparation';
+  if (state.mode === 'trip') {
+    state.view = 'today';
+    state.todayView = 'calendar';
+    state.todayMode = 'today';
+  }
+}
+
 function isActivityToday(item, today = new Date()) {
   const start = parseDateOnly(item.startDate);
   const end = parseDateOnly(item.endDate || item.startDate);
@@ -375,6 +393,23 @@ function groupedActivities(items) {
     }));
 }
 
+function plannedActivities() {
+  const plannedIds = new Set(state.plan.map(itemKey));
+  return state.activities.filter(item => plannedIds.has(itemKey(item.id)));
+}
+
+function visiblePlannedActivities() {
+  let items = plannedActivities();
+  if (state.todayFilters.type) items = items.filter(item => activityType(item) === state.todayFilters.type);
+  if (state.todayFilters.date) items = items.filter(item => eachActivityDate(item).includes(state.todayFilters.date));
+  if (state.todayMode === 'today') items = items.filter(isActivityToday);
+  if (state.todayMode === 'upcoming') items = items.filter(isUpcomingActivity);
+  if (state.todayMode === 'near') {
+    return items.filter(hasCoords).map(item => ({ ...item, distanceKm: distanceKm(item) })).sort((a, b) => (a.distanceKm ?? 9999) - (b.distanceKm ?? 9999) || activitySortValue(a).localeCompare(activitySortValue(b)));
+  }
+  return items.sort((a, b) => activitySortValue(a).localeCompare(activitySortValue(b)));
+}
+
 function visibleActivities() {
   let items = state.activities.filter(item => item.status !== 'descartado');
   if (state.todayFilters.type) items = items.filter(item => activityType(item) === state.todayFilters.type);
@@ -442,16 +477,21 @@ function renderToday() {
   if (state.loadingCatalog) {
     return `<section class="view active"><div class="section-head"><div><h2>Hoy en Nueva York</h2><p class="muted">Cargando calendario de actividades…</p></div></div><div class="panel empty loading-panel"><h3>Sincronizando con Google Sheets</h3><p class="muted">La agenda aparecerá aquí en cuanto llegue el snapshot.</p></div></section>`;
   }
-  const items = visibleActivities();
+  const allPlanned = plannedActivities();
+  const items = state.todayView === 'calendar' ? visiblePlannedActivities() : visibleActivities();
   const groups = groupedActivities(items);
   const types = unique(state.activities.map(activityType));
   const dates = unique(state.activities.flatMap(eachActivityDate).filter(date => date !== 'sin-fecha'));
   const dateOptions = `<option value="">Todas las fechas</option>${dates.map(date => `<option value="${escapeHtml(date)}" ${state.todayFilters.date === date ? 'selected' : ''}>${escapeHtml(activityDateHeading(date))}</option>`).join('')}`;
-  const modeLabel = state.todayMode === 'all' ? 'actividades disponibles' : state.todayMode === 'today' ? 'actividades para hoy' : state.todayMode === 'upcoming' ? 'próximas actividades' : 'actividades cercanas';
+  const modeLabel = state.todayView === 'calendar' ? `${items.length} en mi calendario` : state.todayMode === 'all' ? `${items.length} actividades disponibles` : state.todayMode === 'today' ? `${items.length} actividades para hoy` : state.todayMode === 'upcoming' ? `${items.length} próximas actividades` : `${items.length} actividades cercanas`;
   const syncWarning = state.onlineData && !state.activitiesSynced ? `<div class="notice error"><strong>Calendario no sincronizado.</strong> La app está conectada a Google Sheets, pero el Apps Script publicado todavía no devuelve <code>activities</code>. Actualiza y redespliega el script para ver la pestaña CalendarioActividades.</div>` : '';
-  return `<section class="view active"><div class="section-head"><div><h2>Hoy en Nueva York</h2><p class="muted">${state.activities.length} actividades en calendario · ${items.length} ${modeLabel}</p></div></div>
-    <div class="panel intro station-sign"><span class="station-kicker">Agenda viva</span><h3>Planes con hora, fecha o reserva</h3><p class="muted">Aquí separaremos eventos, mercados, conciertos, cine al aire libre y actividades que no son simplemente “lugares”.</p></div>
+  return `<section class="view active"><div class="section-head"><div><h2>Hoy en Nueva York</h2><p class="muted">${state.activities.length} actividades en calendario · ${modeLabel}</p></div></div>
+    <div class="panel intro station-sign"><span class="station-kicker">${state.todayView === 'calendar' ? 'Mi calendario' : 'Agenda viva'}</span><h3>${state.todayView === 'calendar' ? 'Lo que ya habéis seleccionado por fecha' : 'Planes con hora, fecha o reserva'}</h3><p class="muted">${state.todayView === 'calendar' ? 'Una vista rápida para viaje: sólo actividades añadidas al plan, agrupadas por el día en que pasan.' : 'Aquí separaremos eventos, mercados, conciertos, cine al aire libre y actividades que no son simplemente “lugares”.'}</p></div>
     ${syncWarning}
+    <div class="today-view-tabs" role="group" aria-label="Vista de calendario">
+      <button class="today-view-chip ${state.todayView === 'agenda' ? 'active' : ''}" data-today-view="agenda">Agenda completa</button>
+      <button class="today-view-chip ${state.todayView === 'calendar' ? 'active' : ''}" data-today-view="calendar">Mi calendario <span>${allPlanned.length}</span></button>
+    </div>
     <div class="today-tabs" role="group" aria-label="Filtro de agenda">
       <button class="today-chip ${state.todayMode === 'all' ? 'active' : ''}" data-today-mode="all">Todo</button>
       <button class="today-chip ${state.todayMode === 'today' ? 'active' : ''}" data-today-mode="today">Hoy</button>
@@ -459,7 +499,7 @@ function renderToday() {
       <button class="today-chip ${state.todayMode === 'near' ? 'active' : ''}" data-action="today-near" ${state.locating ? 'disabled' : ''}>${state.locating ? 'Buscando…' : 'Cerca de mí'}</button>
     </div>
     <div class="today-filters"><label>Tipo de actividad<select data-today-filter="type">${selectOptions(types,state.todayFilters.type,'Todos los tipos')}</select></label><label>Fecha<select data-today-filter="date">${dateOptions}</select></label>${state.todayFilters.type || state.todayFilters.date ? '<button class="button" data-action="clear-today-filters">Limpiar filtros</button>' : ''}</div>
-    ${items.length ? `<div class="activity-calendar">${groups.map(group => `<section class="activity-day"><div class="activity-day-head"><h3>${escapeHtml(group.label)}</h3><span class="badge">${group.items.length}</span></div><div class="activity-list">${group.items.map(activityCard).join('')}</div></section>`).join('')}</div>` : `<div class="panel empty"><h3>${state.activitiesSynced ? 'No hay nada para este filtro' : 'Falta sincronizar el calendario'}</h3><p class="muted">${!state.activitiesSynced ? 'La pestaña existe y tiene datos, pero la versión publicada del Apps Script aún no los está enviando a la web.' : state.todayMode === 'today' ? 'Durante el viaje esta vista enseñará sólo lo que encaje con la fecha del día. Puedes mirar “Todo” para ver el calendario completo y votar con antelación.' : 'Prueba con otro filtro o revisa que las actividades tengan fecha y coordenadas.'}</p><button class="button primary" data-today-mode="all">Ver todo</button></div>`}
+    ${items.length ? `<div class="activity-calendar">${groups.map(group => `<section class="activity-day"><div class="activity-day-head"><h3>${escapeHtml(group.label)}</h3><span class="badge">${group.items.length}</span></div><div class="activity-list">${group.items.map(activityCard).join('')}</div></section>`).join('')}</div>` : `<div class="panel empty"><h3>${state.activitiesSynced ? state.todayView === 'calendar' ? 'Todavía no hay actividades en tu calendario' : 'No hay nada para este filtro' : 'Falta sincronizar el calendario'}</h3><p class="muted">${!state.activitiesSynced ? 'La pestaña existe y tiene datos, pero la versión publicada del Apps Script aún no los está enviando a la web.' : state.todayView === 'calendar' ? 'Añade actividades al plan desde la agenda completa y aparecerán aquí agrupadas por fecha.' : state.todayMode === 'today' ? 'Durante el viaje esta vista enseñará sólo lo que encaje con la fecha del día. Puedes mirar “Todo” para ver el calendario completo y votar con antelación.' : 'Prueba con otro filtro o revisa que las actividades tengan fecha y coordenadas.'}</p><button class="button primary" data-today-view="${state.todayView === 'calendar' ? 'agenda' : 'calendar'}">${state.todayView === 'calendar' ? 'Ver agenda completa' : 'Ver mi calendario'}</button></div>`}
   </section>`;
 }
 
@@ -584,9 +624,19 @@ function bindEvents() {
   document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => { state.view = button.dataset.view; state.message = null; render(); }));
   document.querySelectorAll('[data-detail]').forEach(button => button.addEventListener('click', () => { state.detailId = button.dataset.detail; state.view = 'detail'; state.message = null; render(); window.scrollTo({top:0,behavior:'smooth'}); }));
   document.querySelector('[data-action="back-detail"]')?.addEventListener('click', () => { state.view = 'catalog'; render(); });
-  document.querySelector('[data-action="toggle-mode"]')?.addEventListener('click', () => { state.mode = state.mode === 'preparation' ? 'trip' : 'preparation'; state.view = state.mode === 'preparation' ? 'catalog' : 'decide'; render(); });
+  document.querySelector('[data-action="toggle-mode"]')?.addEventListener('click', () => {
+    state.mode = state.mode === 'preparation' ? 'trip' : 'preparation';
+    localStorage.setItem('nyc-mode-override', state.mode);
+    state.view = state.mode === 'preparation' ? 'catalog' : 'today';
+    if (state.mode === 'trip') {
+      state.todayView = 'calendar';
+      state.todayMode = 'today';
+    }
+    render();
+  });
   document.querySelector('[data-action="near"]')?.addEventListener('click', toggleNearMe);
   document.querySelector('[data-action="today-near"]')?.addEventListener('click', activateLocationForToday);
+  document.querySelectorAll('[data-today-view]').forEach(button => button.addEventListener('click', () => { state.todayView = button.dataset.todayView; state.message = null; render(); }));
   document.querySelectorAll('[data-today-mode]').forEach(button => button.addEventListener('click', () => { state.todayMode = button.dataset.todayMode; state.message = null; render(); }));
   document.querySelectorAll('[data-today-filter]').forEach(control => control.addEventListener('change', () => { state.todayFilters[control.dataset.todayFilter] = control.value; render(); }));
   document.querySelector('[data-action="clear-today-filters"]')?.addEventListener('click', () => { state.todayFilters = { type: '', date: '' }; render(); });
@@ -680,6 +730,7 @@ async function submitComment(event) {
 
 async function start() {
   try {
+    applyAutomaticMode();
     state.catalog = await loadSeed();
     render();
     try {

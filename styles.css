@@ -146,6 +146,10 @@ textarea { resize: vertical; }
 .today-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0 0 10px; }
 .today-chip { border: 1px solid var(--ink); border-radius: 999px; padding: 11px 12px; background: rgba(244,246,247,.94); color: var(--ink); font-weight: 900; box-shadow: 2px 2px 0 rgba(16,19,22,.24); }
 .today-chip.active { background: var(--red); color: #fff; box-shadow: 3px 3px 0 var(--ink); }
+.today-view-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 10px; padding: 6px; border: 2px solid var(--ink); border-radius: 15px; background: rgba(16,19,22,.88); }
+.today-view-chip { border: 1px solid rgba(255,255,255,.16); border-radius: 11px; padding: 11px 12px; background: rgba(255,255,255,.08); color: var(--paper); font-weight: 900; }
+.today-view-chip span { display: inline-grid; min-width: 24px; min-height: 24px; place-items: center; margin-left: 6px; border-radius: 999px; background: rgba(255,255,255,.16); font-size: .78rem; }
+.today-view-chip.active { background: var(--yellow); color: var(--ink); box-shadow: inset 0 -3px 0 rgba(16,19,22,.28); }
 .today-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 10px; align-items: end; margin: 0 0 16px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: rgba(244,246,247,.78); }
 .activity-calendar { display: grid; gap: 22px; }
 .activity-day { display: grid; gap: 10px; }
@@ -227,6 +231,7 @@ textarea { resize: vertical; }
   .section-head { display: block; }
   .catalog-toolbar { justify-content: flex-start; margin-top: 12px; }
   .today-tabs { grid-template-columns: 1fr 1fr; }
+  .today-view-tabs { grid-template-columns: 1fr; }
   .today-filters { grid-template-columns: 1fr; }
   .detail-layout { grid-template-columns: 1fr; }
   .detail-aside { position: static; grid-template-columns: 1fr 1fr; }
