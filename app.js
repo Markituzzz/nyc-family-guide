@@ -38,6 +38,17 @@ const decisionArea = item => item.simpleArea || item.macroArea || item.decisionA
 const hasCoords = item => Number.isFinite(Number(item.lat)) && Number.isFinite(Number(item.lng));
 const allItems = () => [...state.catalog, ...state.activities];
 
+function familyVoteLabel(itemId) {
+  const votes = familyCount(itemId);
+  return `${votes} de ${CONFIG.familySize || 4} interesado${votes === 1 ? '' : 's'}`;
+}
+
+function compareByFamilyVotes(a, b) {
+  return familyCount(b.id) - familyCount(a.id)
+    || (Number(b.priorityScore) || 0) - (Number(a.priorityScore) || 0)
+    || String(a.name || '').localeCompare(String(b.name || ''), 'es');
+}
+
 function saveLocal() {
   state.plan = [...new Set(state.plan.map(itemKey).filter(Boolean))];
   localStorage.setItem('nyc-interests', JSON.stringify([...state.interests]));
@@ -508,7 +519,9 @@ function decideMatches() {
     const km = distanceKm(item);
     const proximity = km == null ? 0 : Math.max(0, 12 - km);
     return { ...item, distanceKm: km, score: votes * 5 + priority * 2 + fit + (d.near ? proximity * 3 : 0) };
-  }).sort((a, b) => d.near && state.userLocation ? (a.distanceKm ?? 9999) - (b.distanceKm ?? 9999) || b.score - a.score : b.score - a.score || (b.rating || 0) - (a.rating || 0));
+  }).sort((a, b) => d.near && state.userLocation
+    ? (a.distanceKm ?? 9999) - (b.distanceKm ?? 9999) || familyCount(b.id) - familyCount(a.id) || b.score - a.score
+    : familyCount(b.id) - familyCount(a.id) || b.score - a.score || (b.rating || 0) - (a.rating || 0));
 }
 
 function renderDecide() {
@@ -527,7 +540,7 @@ function recommendationCards() {
   const matches = decideMatches().slice(0, 3);
   if (!matches.length) return `<div class="panel empty"><h3>No hay coincidencias exactas</h3><p class="muted">Amplía el tiempo o marca clima y energía como indiferentes.</p><button class="button" data-action="relax">Relajar condiciones</button></div>`;
   const labels = ['La que mejor encaja', 'Favorita familiar', 'Una alternativa'];
-  return `<div class="results" style="margin-top:16px">${matches.map((item, index) => `<article class="card type-${activityFor(item)} ${index === 0 ? 'recommended' : ''}">${visualCardHead(item)}<span class="badge ${index===0?'accent':''}">${labels[index]}</span><h3>${escapeHtml(item.name)}</h3><p class="muted">${escapeHtml([item.area,item.type || item.subtype].filter(Boolean).join(' · '))}</p><p>${escapeHtml(cardDescription(item) || 'Una opción que encaja con las condiciones seleccionadas.')}</p>${knowNote(item)}<div class="badge-row">${item.distanceKm != null ? `<span class="badge distance">${escapeHtml(formatDistance(item.distanceKm))}</span>` : ''}<span class="badge">${escapeHtml(item.timeNeeded || `${item.idealMinutes || '?'} min`)}</span>${item.setting ? `<span class="badge">${escapeHtml(item.setting)}</span>` : ''}<span class="badge family">${familyCount(item.id)} de ${CONFIG.familySize || 4} interesados</span></div><div class="actions"><button class="button ${index===0?'primary':''}" data-add-plan="${escapeHtml(item.id)}">Añadir al plan</button><button class="button" data-detail="${escapeHtml(item.id)}">Ver ficha</button>${item.mapsUrl ? `<a class="button" href="${escapeHtml(item.mapsUrl)}" target="_blank" rel="noopener">Google Maps</a>` : ''}</div></article>`).join('')}</div>`;
+  return `<div class="results" style="margin-top:16px">${matches.map((item, index) => `<article class="card type-${activityFor(item)} ${index === 0 ? 'recommended' : ''}">${visualCardHead(item)}<span class="badge ${index===0?'accent':''}">${labels[index]}</span><h3>${escapeHtml(item.name)}</h3><p class="muted">${escapeHtml([item.area,item.type || item.subtype].filter(Boolean).join(' · '))}</p><p>${escapeHtml(cardDescription(item) || 'Una opción que encaja con las condiciones seleccionadas.')}</p>${knowNote(item)}<div class="badge-row">${item.distanceKm != null ? `<span class="badge distance">${escapeHtml(formatDistance(item.distanceKm))}</span>` : ''}<span class="badge">${escapeHtml(item.timeNeeded || `${item.idealMinutes || '?'} min`)}</span>${item.setting ? `<span class="badge">${escapeHtml(item.setting)}</span>` : ''}<span class="badge family">${escapeHtml(familyVoteLabel(item.id))}</span></div><div class="actions"><button class="button ${index===0?'primary':''}" data-add-plan="${escapeHtml(item.id)}">Añadir al plan</button><button class="button" data-detail="${escapeHtml(item.id)}">Ver ficha</button>${item.mapsUrl ? `<a class="button" href="${escapeHtml(item.mapsUrl)}" target="_blank" rel="noopener">Google Maps</a>` : ''}</div></article>`).join('')}</div>`;
 }
 
 function activityCard(item) {
@@ -583,7 +596,7 @@ function catalogFiltered() {
     if (f.status === 'family' && familyCount(item.id) < 2) return false;
     if (f.status === 'pending' && state.interests.has(item.id)) return false;
     return true;
-  });
+  }).sort(compareByFamilyVotes);
 }
 
 function renderCatalog() {
@@ -599,7 +612,7 @@ function renderCatalog() {
   ${state.mode === 'preparation' ? `<div class="panel intro station-sign"><span class="station-kicker">Línea de votos</span><h3>¿Qué te gustaría visitar?</h3><p class="muted">Marca tus intereses. Las coincidencias familiares influirán en las recomendaciones.</p><div class="progress"><span style="width:${Math.min(100, state.catalog.length ? selected/state.catalog.length*100 : 0)}%"></span></div></div>` : ''}
   <div id="proposal-slot"></div><div class="filters compact"><label>Buscar<input type="search" data-filter="search" value="${escapeHtml(state.filters.search)}" placeholder="Lugar, barrio o actividad"></label><label>Mostrar<select data-filter="status"><option value="all">Todos</option><option value="pending" ${state.filters.status==='pending'?'selected':''}>Pendientes</option><option value="selected" ${state.filters.status==='selected'?'selected':''}>Mis selecciones</option><option value="family-any" ${state.filters.status==='family-any'?'selected':''}>Seleccionadas por la familia</option><option value="family" ${state.filters.status==='family'?'selected':''}>Coincidencias familiares</option></select></label><button class="button filter-toggle" type="button" data-action="toggle-filters">${state.filtersOpen ? 'Ocultar filtros' : 'Más filtros'}</button></div>${state.filtersOpen ? `<div class="filters advanced"><label>Tipo<select data-filter="type">${selectOptions(types,state.filters.type,'Todos')}</select></label><label>Borough<select data-filter="borough">${selectOptions(boroughs,state.filters.borough,'Todos')}</select></label><label>Zona<select data-filter="area">${selectOptions(areas,state.filters.area,'Todas')}</select></label></div>` : ''}
   <div class="catalog-meta"><strong>${filtered.length} resultados</strong><span class="sync-state">${state.onlineData ? 'Sincronizado con Google Sheets' : 'Datos locales'}</span></div>
-  <div class="catalog-list">${filtered.slice(0,state.visible).map(item => `<article class="card catalog-item type-${activityFor(item)}">${visualCardHead(item)}<button class="catalog-copy" data-detail="${escapeHtml(item.id)}" aria-label="Ver ficha de ${escapeHtml(item.name)}"><div class="badge-row"><span class="badge">${escapeHtml(item.type || item.itemKind)}</span>${item.origin === 'family' ? '<span class="badge accent">Propuesto por la familia</span>' : ''}</div><h3>${escapeHtml(item.name)}</h3><p class="muted">${escapeHtml([item.area,item.borough,item.timeNeeded].filter(Boolean).join(' · '))}</p>${knowNote(item)}</button><button class="button interest-button ${state.interests.has(item.id)?'selected':''}" data-interest="${escapeHtml(item.id)}">${state.interests.has(item.id)?'Seleccionado':'Me gustaría ir'}</button></article>`).join('')}</div>${filtered.length > state.visible ? '<button class="button block" data-action="more">Mostrar más</button>' : ''}</section>`;
+  <div class="catalog-list">${filtered.slice(0,state.visible).map(item => `<article class="card catalog-item type-${activityFor(item)}">${visualCardHead(item)}<button class="catalog-copy" data-detail="${escapeHtml(item.id)}" aria-label="Ver ficha de ${escapeHtml(item.name)}"><div class="badge-row"><span class="badge">${escapeHtml(item.type || item.itemKind)}</span><span class="badge family">${escapeHtml(familyVoteLabel(item.id))}</span>${item.origin === 'family' ? '<span class="badge accent">Propuesto por la familia</span>' : ''}</div><h3>${escapeHtml(item.name)}</h3><p class="muted">${escapeHtml([item.area,item.borough,item.timeNeeded].filter(Boolean).join(' · '))}</p>${knowNote(item)}</button><button class="button interest-button ${state.interests.has(item.id)?'selected':''}" data-interest="${escapeHtml(item.id)}">${state.interests.has(item.id)?'Seleccionado':'Me gustaría ir'}</button></article>`).join('')}</div>${filtered.length > state.visible ? '<button class="button block" data-action="more">Mostrar más</button>' : ''}</section>`;
 }
 
 function itemComments(itemId) {
