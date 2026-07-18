@@ -211,6 +211,39 @@ function inferredTypeLabel(item) {
   return { cultura: 'Cultura / ocio', paseo: 'Paseo / zona', comida: 'Gastronomía', compras: 'Compras' }[activityFor(item)] || 'Propuesto por la familia';
 }
 
+function searchableText(item) {
+  return normalize([
+    item.name,
+    item.type,
+    item.subtype,
+    item.category,
+    item.subcategory,
+    inferredTypeLabel(item),
+    item.area,
+    decisionArea(item),
+    item.borough,
+    item.cluster,
+    item.description,
+    item.shortDescription,
+    item.whyItMatters,
+    item.storyAngle,
+    item.bestFor,
+    item.ifCondition,
+    item.notes,
+    item.address,
+    item.price,
+    item.costLevel,
+    item.bestMoment,
+    item.weatherFit,
+    item.energyLevel,
+    item.shoppingType,
+    item.nearbyAnchors,
+    item.planRole,
+    item.priority,
+    item.origin === 'family' ? 'propuesto por la familia propuesta familiar' : ''
+  ].filter(Boolean).join(' '));
+}
+
 function activityIcon(activity) {
   return { cultura: '🏛️', paseo: '🚶', comida: '🍔', compras: '🛍️' }[activity] || '📍';
 }
@@ -602,8 +635,7 @@ function renderToday() {
 function catalogFiltered() {
   const f = state.filters;
   return state.catalog.filter(item => {
-    const haystack = normalize(`${item.name} ${item.type} ${item.subtype} ${item.area} ${decisionArea(item)} ${item.borough} ${item.category}`);
-    if (f.search && !haystack.includes(normalize(f.search))) return false;
+    if (f.search && !searchableText(item).includes(normalize(f.search))) return false;
     if (f.type && item.type !== f.type) return false;
     if (f.borough && item.borough !== f.borough) return false;
     if (f.area && decisionArea(item) !== f.area) return false;
