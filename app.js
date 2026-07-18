@@ -9,7 +9,7 @@ const state = {
   pendingPlanRemovals: new Set(JSON.parse(localStorage.getItem('nyc-pending-plan-removals') || '[]')),
   deviceId: localStorage.getItem('nyc-device-id') || crypto.randomUUID(),
   filters: { search: '', type: '', borough: '', area: '', status: 'all' },
-  todayMode: 'today',
+  todayMode: 'all',
   filtersOpen: false,
   decide: { near: false, borough: 'Manhattan', area: '', activity: 'cultura', time: 999, energy: 'cualquiera', setting: 'cualquiera' },
   visible: 24,
@@ -226,7 +226,7 @@ async function toggleNearMe() {
 
 async function activateLocationForToday() {
   if (state.todayMode === 'near') {
-    state.todayMode = 'today';
+    state.todayMode = 'all';
     render();
     return;
   }
@@ -287,8 +287,66 @@ function activitySortValue(item) {
   return `${item.startDate || '9999-99-99'} ${item.startTime || '99:99'}`;
 }
 
+function activityScore(item) {
+  const priority = { alta: 3, media: 2, baja: 1 }[normalize(item.priority)] || 1;
+  const fit = { 'muy alta': 4, alta: 3, media: 2, baja: 1 }[normalize(item.familyFit)] || 1;
+  const teen = { 'muy alta': 4, alta: 3, media: 2, baja: 1 }[normalize(item.teenFit)] || 1;
+  const reservationBoost = normalize(item.reservationRequired) === 'si' || normalize(item.reservationRequired) === 'sí' ? 1 : 0;
+  return familyCount(item.id) * 8 + priority * 3 + fit + teen + reservationBoost;
+}
+
+function eachActivityDate(item) {
+  const start = parseDateOnly(item.startDate);
+  const end = parseDateOnly(item.endDate || item.startDate);
+  if (!start) return ['sin-fecha'];
+  const dates = [];
+  const cursor = new Date(start);
+  const last = end && end >= start ? end : start;
+  while (cursor <= last && dates.length < 31) {
+    dates.push(dateKey(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates;
+}
+
+function activityDateHeading(key) {
+  if (key === 'sin-fecha') return 'Fecha por confirmar';
+  const date = parseDateOnly(key);
+  const today = parseDateOnly(dateKey(new Date()));
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const formatted = new Intl.DateTimeFormat('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }).format(date);
+  if (dateKey(date) === dateKey(today)) return `Hoy · ${formatted}`;
+  if (dateKey(date) === dateKey(tomorrow)) return `Mañana · ${formatted}`;
+  return formatted;
+}
+
+function groupedActivities(items) {
+  if (state.todayMode === 'near') return [{ key: 'near', label: 'Más cerca de vuestra ubicación', items }];
+  const todayKey = dateKey(new Date());
+  const groups = new Map();
+  items.forEach(item => {
+    eachActivityDate(item).forEach(key => {
+      if (state.todayMode === 'today' && key !== todayKey) return;
+      if (state.todayMode === 'upcoming' && key !== 'sin-fecha' && key < todayKey) return;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(item);
+    });
+  });
+  return [...groups.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, groupItems]) => ({
+      key,
+      label: activityDateHeading(key),
+      items: groupItems.sort((a, b) => activityScore(b) - activityScore(a) || activitySortValue(a).localeCompare(activitySortValue(b)))
+    }));
+}
+
 function visibleActivities() {
   let items = state.activities.filter(item => item.status !== 'descartado');
+  if (state.todayMode === 'all') {
+    return items.sort((a, b) => activitySortValue(a).localeCompare(activitySortValue(b)) || activityScore(b) - activityScore(a));
+  }
   if (state.todayMode === 'today') items = items.filter(isActivityToday);
   if (state.todayMode === 'upcoming') items = items.filter(isUpcomingActivity);
   if (state.todayMode === 'near') {
@@ -342,7 +400,7 @@ function activityCard(item) {
   const ticketUrl = item.ticketUrl || '';
   const infoUrl = ticketUrl || item.officialUrl || '';
   const reservation = item.reservationRequired ? String(item.reservationRequired) : '';
-  return `<article class="card activity-card type-${activityFor(item)}">${visualCardHead(item)}<div class="activity-main"><div class="badge-row"><span class="badge accent">${escapeHtml(formatActivityDate(item))}</span>${activityTime(item) ? `<span class="badge time-badge">${escapeHtml(activityTime(item))}</span>` : ''}${item.price ? `<span class="badge price-badge">${escapeHtml(item.price)}</span>` : ''}${reservation ? `<span class="badge reserve-badge">${escapeHtml(reservation === 'Sí' ? 'Reserva necesaria' : reservation === 'Opcional' ? 'Reserva opcional' : 'Sin reserva')}</span>` : ''}${item.distanceKm != null ? `<span class="badge distance">${escapeHtml(formatDistance(item.distanceKm))}</span>` : ''}</div><h3>${escapeHtml(item.name)}</h3><p class="muted">${escapeHtml([item.category, item.area, item.borough].filter(Boolean).join(' · '))}</p>${item.notes ? `<p class="activity-note">${escapeHtml(item.notes)}</p>` : ''}<div class="actions"><button class="button primary" data-add-plan="${escapeHtml(item.id)}">Añadir al plan</button>${infoUrl ? `<a class="button" href="${escapeHtml(infoUrl)}" target="_blank" rel="noopener">${ticketUrl ? 'Entradas / RSVP' : 'Web oficial'}</a>` : ''}${item.mapsUrl ? `<a class="button" href="${escapeHtml(item.mapsUrl)}" target="_blank" rel="noopener">Maps</a>` : ''}</div></div></article>`;
+  return `<article class="card activity-card type-${activityFor(item)}">${visualCardHead(item)}<div class="activity-main"><div class="badge-row"><span class="badge accent">${escapeHtml(formatActivityDate(item))}</span>${activityTime(item) ? `<span class="badge time-badge">${escapeHtml(activityTime(item))}</span>` : ''}${item.price ? `<span class="badge price-badge">${escapeHtml(item.price)}</span>` : ''}${reservation ? `<span class="badge reserve-badge">${escapeHtml(reservation === 'Sí' ? 'Reserva necesaria' : reservation === 'Opcional' ? 'Reserva opcional' : 'Sin reserva')}</span>` : ''}<span class="badge family">${familyCount(item.id)} de ${CONFIG.familySize || 4} interesados</span>${item.distanceKm != null ? `<span class="badge distance">${escapeHtml(formatDistance(item.distanceKm))}</span>` : ''}</div><h3>${escapeHtml(item.name)}</h3><p class="muted">${escapeHtml([item.category, item.area, item.borough].filter(Boolean).join(' · '))}</p>${item.notes ? `<p class="activity-note">${escapeHtml(item.notes)}</p>` : ''}<div class="actions"><button class="button interest-button ${state.interests.has(item.id)?'selected':''}" data-interest="${escapeHtml(item.id)}">${state.interests.has(item.id)?'Interesado':'Me interesa'}</button><button class="button primary" data-add-plan="${escapeHtml(item.id)}">Añadir al plan</button><button class="button" data-detail="${escapeHtml(item.id)}">Ver ficha</button>${infoUrl ? `<a class="button" href="${escapeHtml(infoUrl)}" target="_blank" rel="noopener">${ticketUrl ? 'Entradas / RSVP' : 'Web oficial'}</a>` : ''}${item.mapsUrl ? `<a class="button" href="${escapeHtml(item.mapsUrl)}" target="_blank" rel="noopener">Maps</a>` : ''}</div></div></article>`;
 }
 
 function renderToday() {
@@ -350,15 +408,17 @@ function renderToday() {
     return `<section class="view active"><div class="section-head"><div><h2>Hoy en Nueva York</h2><p class="muted">Cargando calendario de actividades…</p></div></div><div class="panel empty loading-panel"><h3>Sincronizando con Google Sheets</h3><p class="muted">La agenda aparecerá aquí en cuanto llegue el snapshot.</p></div></section>`;
   }
   const items = visibleActivities();
-  const modeLabel = state.todayMode === 'today' ? 'actividades para hoy' : state.todayMode === 'upcoming' ? 'próximas actividades' : 'actividades cercanas';
+  const groups = groupedActivities(items);
+  const modeLabel = state.todayMode === 'all' ? 'actividades disponibles' : state.todayMode === 'today' ? 'actividades para hoy' : state.todayMode === 'upcoming' ? 'próximas actividades' : 'actividades cercanas';
   return `<section class="view active"><div class="section-head"><div><h2>Hoy en Nueva York</h2><p class="muted">${state.activities.length} actividades en calendario · ${items.length} ${modeLabel}</p></div></div>
     <div class="panel intro station-sign"><span class="station-kicker">Agenda viva</span><h3>Planes con hora, fecha o reserva</h3><p class="muted">Aquí separaremos eventos, mercados, conciertos, cine al aire libre y actividades que no son simplemente “lugares”.</p></div>
     <div class="today-tabs" role="group" aria-label="Filtro de agenda">
+      <button class="today-chip ${state.todayMode === 'all' ? 'active' : ''}" data-today-mode="all">Todo</button>
       <button class="today-chip ${state.todayMode === 'today' ? 'active' : ''}" data-today-mode="today">Hoy</button>
       <button class="today-chip ${state.todayMode === 'upcoming' ? 'active' : ''}" data-today-mode="upcoming">Próximos</button>
       <button class="today-chip ${state.todayMode === 'near' ? 'active' : ''}" data-action="today-near" ${state.locating ? 'disabled' : ''}>${state.locating ? 'Buscando…' : 'Cerca de mí'}</button>
     </div>
-    ${items.length ? `<div class="activity-list">${items.map(activityCard).join('')}</div>` : `<div class="panel empty"><h3>No hay nada para este filtro</h3><p class="muted">${state.todayMode === 'today' ? 'Durante el viaje esta vista enseñará sólo lo que encaje con la fecha del día. Puedes mirar “Próximos” para ver todo el calendario cargado.' : 'Prueba con otro filtro o revisa que las actividades tengan fecha y coordenadas.'}</p><button class="button primary" data-today-mode="upcoming">Ver próximos</button></div>`}
+    ${items.length ? `<div class="activity-calendar">${groups.map(group => `<section class="activity-day"><div class="activity-day-head"><h3>${escapeHtml(group.label)}</h3><span class="badge">${group.items.length}</span></div><div class="activity-list">${group.items.map(activityCard).join('')}</div></section>`).join('')}</div>` : `<div class="panel empty"><h3>No hay nada para este filtro</h3><p class="muted">${state.todayMode === 'today' ? 'Durante el viaje esta vista enseñará sólo lo que encaje con la fecha del día. Puedes mirar “Todo” para ver el calendario completo y votar con antelación.' : 'Prueba con otro filtro o revisa que las actividades tengan fecha y coordenadas.'}</p><button class="button primary" data-today-mode="all">Ver todo</button></div>`}
   </section>`;
 }
 
@@ -506,7 +566,24 @@ function bindEvents() {
       nextSearch?.setSelectionRange(cursor, cursor);
     }
   }));
-  document.querySelectorAll('[data-interest]').forEach(button => button.addEventListener('click', async () => { const id = button.dataset.interest; state.interests.has(id) ? state.interests.delete(id) : state.interests.add(id); saveLocal(); render(); try { await writeAction('interest', { deviceId: state.deviceId, itemId: id, itemKind: allItems().find(item => item.id===id)?.itemKind || 'place', interested: state.interests.has(id) }); } catch {} }));
+  document.querySelectorAll('[data-interest]').forEach(button => button.addEventListener('click', async () => {
+    const id = button.dataset.interest;
+    const item = allItems().find(entry => entry.id === id);
+    state.interests.has(id) ? state.interests.delete(id) : state.interests.add(id);
+    saveLocal();
+    render();
+    try {
+      await writeAction('interest', {
+        deviceId: state.deviceId,
+        itemId: id,
+        itemKind: item?.itemKind || 'place',
+        interested: state.interests.has(id),
+        itemDate: item?.itemKind === 'activity' && item.startDate && (!item.endDate || item.endDate === item.startDate) ? item.startDate : '',
+        startDate: item?.itemKind === 'activity' ? item.startDate || '' : '',
+        endDate: item?.itemKind === 'activity' ? item.endDate || item.startDate || '' : ''
+      });
+    } catch {}
+  }));
   document.querySelectorAll('[data-remove-plan]').forEach(button => button.addEventListener('click', () => removeFromPlan(button.dataset.removePlan)));
   document.querySelectorAll('[data-add-plan]').forEach(button => button.addEventListener('click', () => addToPlan(button.dataset.addPlan, button)));
   document.querySelector('[data-action="maps-plan"]')?.addEventListener('click', openMapsPlan);

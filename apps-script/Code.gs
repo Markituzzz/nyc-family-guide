@@ -95,14 +95,16 @@ function addProposal_(payload) {
 function upsertInterest_(payload) {
   requireFields_(payload, ['deviceId', 'itemId', 'itemKind']);
   const sheet = getSheet_(SHEETS.interests);
-  const headers = headers_(sheet);
+  const headers = ensureHeaders_(sheet, ['deviceId', 'itemId', 'itemKind', 'interested', 'itemDate', 'startDate', 'endDate', 'updatedAt']);
   const rows = sheet.getDataRange().getDisplayValues();
   const deviceIndex = headers.indexOf('deviceId');
   const itemIndex = headers.indexOf('itemId');
   const rowIndex = rows.slice(1).findIndex(function(row) { return row[deviceIndex] === payload.deviceId && row[itemIndex] === payload.itemId; });
   const object = {
     deviceId: safeText_(payload.deviceId, 100), itemId: safeText_(payload.itemId, 100),
-    itemKind: safeText_(payload.itemKind, 30), interested: Boolean(payload.interested), updatedAt: new Date()
+    itemKind: safeText_(payload.itemKind, 30), interested: Boolean(payload.interested),
+    itemDate: safeText_(payload.itemDate, 30), startDate: safeText_(payload.startDate, 30),
+    endDate: safeText_(payload.endDate, 30), updatedAt: new Date()
   };
   if (rowIndex >= 0) writeObjectRow_(sheet, headers, rowIndex + 2, object); else appendObject_(sheet, headers, object);
 }

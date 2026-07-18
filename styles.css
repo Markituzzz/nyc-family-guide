@@ -146,6 +146,10 @@ textarea { resize: vertical; }
 .today-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0 0 14px; }
 .today-chip { border: 1px solid var(--ink); border-radius: 999px; padding: 11px 12px; background: rgba(244,246,247,.94); color: var(--ink); font-weight: 900; box-shadow: 2px 2px 0 rgba(16,19,22,.24); }
 .today-chip.active { background: var(--red); color: #fff; box-shadow: 3px 3px 0 var(--ink); }
+.activity-calendar { display: grid; gap: 22px; }
+.activity-day { display: grid; gap: 10px; }
+.activity-day-head { position: sticky; top: 76px; z-index: 8; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid rgba(16,19,22,.18); border-left: 6px solid var(--red); border-radius: 12px; background: rgba(244,246,247,.94); backdrop-filter: blur(12px); box-shadow: 0 8px 20px rgba(16,19,22,.08); }
+.activity-day-head h3 { margin: 0; text-transform: capitalize; }
 .activity-list { display: grid; gap: 12px; }
 .activity-card { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; }
 .activity-card .visual-head { width: 44px; display: grid; gap: 7px; justify-items: center; margin: 0; padding-top: 4px; }
