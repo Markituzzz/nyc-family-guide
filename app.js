@@ -35,7 +35,7 @@ const slug = value => normalize(value).replace(/[^a-z0-9]+/g, '_').replace(/^_|_
 const itemKey = value => String(value ?? '').trim();
 const unique = values => [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
 const familyCount = itemId => state.remoteInterests?.filter(item => item.itemId === itemId && String(item.interested).toLowerCase() !== 'false').length || (state.interests.has(itemId) ? 1 : 0);
-const decisionArea = item => item.simpleArea || item.macroArea || item.decisionArea || item.cluster || item.area || '';
+const decisionArea = item => item.simpleArea || item.decisionArea || item.area || item.macroArea || item.cluster || '';
 const hasCoords = item => Number.isFinite(Number(item.lat)) && Number.isFinite(Number(item.lng));
 const allItems = () => [...state.catalog, ...state.activities];
 
