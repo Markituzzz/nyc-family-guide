@@ -143,9 +143,10 @@ textarea { resize: vertical; }
 .know-note { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-top: 9px !important; padding-left: 10px; border-left: 3px solid var(--type-color); color: #3f474d; font-size: .86rem; line-height: 1.35; }
 .know-note strong { display: inline; margin-right: 6px; color: var(--ink); font-size: .68rem; letter-spacing: .06em; text-transform: uppercase; }
 .interest-button.selected { background: var(--green); color: white; border-color: var(--green); }
-.today-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0 0 14px; }
+.today-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0 0 10px; }
 .today-chip { border: 1px solid var(--ink); border-radius: 999px; padding: 11px 12px; background: rgba(244,246,247,.94); color: var(--ink); font-weight: 900; box-shadow: 2px 2px 0 rgba(16,19,22,.24); }
 .today-chip.active { background: var(--red); color: #fff; box-shadow: 3px 3px 0 var(--ink); }
+.today-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 10px; align-items: end; margin: 0 0 16px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: rgba(244,246,247,.78); }
 .activity-calendar { display: grid; gap: 22px; }
 .activity-day { display: grid; gap: 10px; }
 .activity-day-head { position: sticky; top: 76px; z-index: 8; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid rgba(16,19,22,.18); border-left: 6px solid var(--red); border-radius: 12px; background: rgba(244,246,247,.94); backdrop-filter: blur(12px); box-shadow: 0 8px 20px rgba(16,19,22,.08); }
@@ -222,7 +223,8 @@ textarea { resize: vertical; }
   .choice-grid { grid-template-columns: 1fr 1fr; }
   .section-head { display: block; }
   .catalog-toolbar { justify-content: flex-start; margin-top: 12px; }
-  .today-tabs { grid-template-columns: 1fr; }
+  .today-tabs { grid-template-columns: 1fr 1fr; }
+  .today-filters { grid-template-columns: 1fr; }
   .detail-layout { grid-template-columns: 1fr; }
   .detail-aside { position: static; grid-template-columns: 1fr 1fr; }
 }
@@ -237,6 +239,7 @@ textarea { resize: vertical; }
   .activity-card { grid-template-columns: 1fr; }
   .interest-button { justify-self: start; }
   .primary-nav { margin-bottom: 16px; }
+  .today-tabs { grid-template-columns: 1fr; }
   .detail-hero { min-height: 250px; padding: 24px 20px; align-items: flex-start; }
   .detail-hero::after, .card::after { display: none; }
   .detail-monogram { width: 70px; height: 70px; font-size: 1.5rem; }

@@ -1,5 +1,5 @@
-const CACHE = 'nyc-family-v18-20260718';
-const APP_SHELL = ['./', './index.html', './styles.css?v=20260718-4', './app.js?v=20260718-4', './config.js?v=20260718-4', './manifest.webmanifest', './assets/icon.svg', './data/catalog.json'];
+const CACHE = 'nyc-family-v19-20260718';
+const APP_SHELL = ['./', './index.html', './styles.css?v=20260718-5', './app.js?v=20260718-5', './config.js?v=20260718-5', './manifest.webmanifest', './assets/icon.svg', './data/catalog.json'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(APP_SHELL)));
