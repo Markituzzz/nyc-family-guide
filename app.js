@@ -194,7 +194,7 @@ function activityFor(item) {
   const text = normalize(`${item.type} ${item.subtype} ${item.category} ${item.name} ${item.shortDescription} ${item.whyItMatters} ${item.notes}`);
   if (/gastronom|restaurante|restaurant|pizza|burger|hamburg|comida|mercado|panader|bakery|bagel|taco|ramen|deli|cookie|food|brunch|breakfast|coffee|cafe|café/.test(text)) return 'comida';
   if (/compra|tienda|outlet|shopping/.test(text)) return 'compras';
-  if (/museo|cultura|mirador|iglesia|arte|historia|observatory/.test(text)) return 'cultura';
+  if (/museo|cultura|mirador|iglesia|arte|historia|observatory|musica|música|jazz|club|venue|teatro|cine|concierto|rock|opera|ópera/.test(text)) return 'cultura';
   return 'paseo';
 }
 
@@ -263,13 +263,23 @@ function activityIcon(activity) {
   return { cultura: '🏛️', paseo: '🚶', comida: '🍔', compras: '🛍️', agenda: '🎟️' }[activity] || '📍';
 }
 
+function placeIcon(item) {
+  const text = normalize(`${item.type} ${item.subtype} ${item.category} ${item.name} ${item.shortDescription} ${item.whyItMatters} ${item.notes}`);
+  if (/musica|música|jazz|club|venue|concierto|rock|opera|ópera/.test(text)) return '🎵';
+  if (/cine|movie|film/.test(text)) return '🎬';
+  if (/teatro|broadway|show/.test(text)) return '🎭';
+  if (/museo|arte|galeria|galería/.test(text)) return '🖼️';
+  if (/mirador|observatory|skyline/.test(text)) return '🌇';
+  return activityIcon(activityFor(item));
+}
+
 function routeBadge(activity) {
   return { cultura: 'A', paseo: '7', comida: 'F', compras: 'N', agenda: 'A' }[activity] || 'M';
 }
 
 function visualCardHead(item) {
   const activity = activityFor(item);
-  return `<div class="visual-head" aria-hidden="true"><span class="subway-bullet">${routeBadge(activity)}</span><span class="type-icon">${activityIcon(activity)}</span><span class="route-line"></span></div>`;
+  return `<div class="visual-head" aria-hidden="true"><span class="subway-bullet">${routeBadge(activity)}</span><span class="type-icon">${placeIcon(item)}</span><span class="route-line"></span></div>`;
 }
 
 function catalogCardHead(item) {
@@ -713,7 +723,7 @@ function renderDetail() {
   const externalRating = item.rating ? `<div class="rating-block"><strong>${escapeHtml(item.rating)}</strong><span>${escapeHtml(item.reviews ? `${Number(item.reviews).toLocaleString('es-ES')} opiniones` : 'Valoración externa')}</span></div>` : '';
   const km = distanceKm(item);
   return `<section class="view active detail-view"><button class="back-link" data-action="back-detail">← Volver</button>
-    <header class="detail-hero type-${activityFor(item)}"><div><div class="badge-row"><span class="subway-bullet">${routeBadge(activityFor(item))}</span><span class="badge accent">${escapeHtml(inferredTypeLabel(item))}</span>${item.subcategory ? `<span class="badge">${escapeHtml(activityLabel(item.subcategory))}</span>` : ''}${item.origin === 'family' ? '<span class="badge">Propuesto por la familia</span>' : ''}</div><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml([item.area,item.borough].filter(Boolean).join(' · '))}</p></div><div class="detail-monogram" aria-hidden="true"><span>${item.itemKind === 'activity' ? calendarIcon(item) : activityIcon(activityFor(item))}</span><small>${escapeHtml(item.name.slice(0,2).toUpperCase())}</small></div></header>
+    <header class="detail-hero type-${activityFor(item)}"><div><div class="badge-row"><span class="subway-bullet">${routeBadge(activityFor(item))}</span><span class="badge accent">${escapeHtml(inferredTypeLabel(item))}</span>${item.subcategory ? `<span class="badge">${escapeHtml(activityLabel(item.subcategory))}</span>` : ''}${item.origin === 'family' ? '<span class="badge">Propuesto por la familia</span>' : ''}</div><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml([item.area,item.borough].filter(Boolean).join(' · '))}</p></div><div class="detail-monogram" aria-hidden="true"><span>${item.itemKind === 'activity' ? calendarIcon(item) : placeIcon(item)}</span><small>${escapeHtml(item.name.slice(0,2).toUpperCase())}</small></div></header>
     <div class="detail-actions"><button class="button primary" data-add-plan="${escapeHtml(item.id)}">Añadir al itinerario</button><button class="button interest-button ${state.interests.has(item.id)?'selected':''}" data-interest="${escapeHtml(item.id)}">${state.interests.has(item.id)?'Me interesa':'Me gustaría ir'}</button>${item.mapsUrl ? `<a class="button" href="${escapeHtml(item.mapsUrl)}" target="_blank" rel="noopener">Abrir en Maps</a>` : ''}${item.ticketUrl ? `<a class="button" href="${escapeHtml(item.ticketUrl)}" target="_blank" rel="noopener">Entradas / RSVP</a>` : ''}${item.officialUrl ? `<a class="button" href="${escapeHtml(item.officialUrl)}" target="_blank" rel="noopener">Web oficial</a>` : ''}</div>
     <div class="detail-layout"><div class="detail-main">
       <section class="detail-section"><p class="detail-lead">${escapeHtml(description)}</p>${context && context !== description ? `<p>${escapeHtml(context)}</p>` : ''}</section>
