@@ -2,7 +2,7 @@ const SPREADSHEET_ID = '1WaotDKkqltUQlrPKYuo7ZupEIKUF27tuklrGcSe4brM';
 const SHEETS = {
   places: 'Lugares', experiences: 'Experiencias', interests: 'Intereses', proposals: 'PropuestasFamilia',
   comments: 'Comentarios', itineraries: 'Itinerarios', itineraryItems: 'ItinerarioItems',
-  planChanges: 'ItinerarioCambios'
+  planChanges: 'ItinerarioCambios', activities: 'CalendarioActividades'
 };
 
 function doGet(e) {
@@ -39,6 +39,7 @@ function doPost(e) {
 function getSnapshot_() {
   return {
     places: readPublished_(SHEETS.places), experiences: readPublished_(SHEETS.experiences),
+    activities: readPublished_(SHEETS.activities),
     interests: readObjects_(SHEETS.interests), proposals: readPublished_(SHEETS.proposals),
     comments: readObjects_(SHEETS.comments), itineraries: readObjects_(SHEETS.itineraries),
     itineraryItems: readObjects_(SHEETS.itineraryItems), generatedAt: new Date().toISOString()
@@ -119,7 +120,7 @@ function upsertPlanItem_(payload) {
   const duplicate = rows.slice(1).some(function(row) { return row[headers.indexOf('itineraryId')] === itineraryId && row[headers.indexOf('itemId')] === payload.itemId; });
   if (!duplicate) appendObject_(items, headers, {
     itineraryItemId: Utilities.getUuid(), itineraryId: itineraryId, itemId: safeText_(payload.itemId, 100),
-    itemKind: 'place', position: Number(payload.position) || rows.length, notes: '', addedAt: new Date()
+    itemKind: safeText_(payload.itemKind || 'place', 30), position: Number(payload.position) || rows.length, notes: '', addedAt: new Date()
   });
 }
 

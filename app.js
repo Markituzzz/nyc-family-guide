@@ -3,11 +3,13 @@ const state = {
   view: 'catalog',
   mode: 'preparation',
   catalog: [],
+  activities: [],
   interests: new Set(JSON.parse(localStorage.getItem('nyc-interests') || '[]')),
   plan: JSON.parse(localStorage.getItem('nyc-plan') || '[]'),
   pendingPlanRemovals: new Set(JSON.parse(localStorage.getItem('nyc-pending-plan-removals') || '[]')),
   deviceId: localStorage.getItem('nyc-device-id') || crypto.randomUUID(),
   filters: { search: '', type: '', borough: '', area: '', status: 'all' },
+  todayMode: 'today',
   filtersOpen: false,
   decide: { near: false, borough: 'Manhattan', area: '', activity: 'cultura', time: 999, energy: 'cualquiera', setting: 'cualquiera' },
   visible: 24,
@@ -31,6 +33,7 @@ const unique = values => [...new Set(values.filter(Boolean))].sort((a, b) => a.l
 const familyCount = itemId => state.remoteInterests?.filter(item => item.itemId === itemId && String(item.interested).toLowerCase() !== 'false').length || (state.interests.has(itemId) ? 1 : 0);
 const decisionArea = item => item.simpleArea || item.macroArea || item.decisionArea || item.cluster || item.area || '';
 const hasCoords = item => Number.isFinite(Number(item.lat)) && Number.isFinite(Number(item.lng));
+const allItems = () => [...state.catalog, ...state.activities];
 
 function saveLocal() {
   state.plan = [...new Set(state.plan.map(itemKey).filter(Boolean))];
@@ -71,6 +74,7 @@ async function loadRemote() {
   if (!payload?.ok) throw new Error(payload?.error || 'Respuesta inválida.');
   const places = (payload.data.places || []).map(item => ({ ...item, id: item.id, itemKind: item.itemKind || 'place' }));
   const experiences = (payload.data.experiences || []).map(item => ({ ...item, id: item.id || item.experienceId, itemKind: item.itemKind || 'experience', type: item.type || 'Experiencia' }));
+  const activities = (payload.data.activities || []).map(item => ({ ...item, id: item.id, itemKind: 'activity', type: item.type || 'Actividad' }));
   const items = [...places, ...experiences, ...(payload.data.proposals || []).map(proposal => ({
     ...proposal,
     id: proposal.id,
@@ -88,6 +92,7 @@ async function loadRemote() {
     published: true
   }))];
   if (items.length) state.catalog = items;
+  state.activities = activities.filter(item => item.id && item.name);
   state.remoteInterests = payload.data.interests || [];
   state.remoteComments = payload.data.comments || [];
   const remotePlanIds = (payload.data.itineraryItems || [])
@@ -110,8 +115,9 @@ async function writeAction(action, payload) {
 }
 
 function appHeader() {
-  return `<header class="masthead"><div class="brand"><div class="brand-mark"><span>NY</span><i></i></div><div><p class="eyebrow">Guía familiar · 2026</p><h1>${state.view === 'detail' ? 'Ficha del lugar' : state.view === 'decide' ? '¿Qué hacemos ahora?' : state.view === 'catalog' ? 'Catálogo de Nueva York' : 'Nuestro itinerario'}</h1></div></div><button class="mode" data-action="toggle-mode">${state.mode === 'preparation' ? 'Modo preparación' : 'Modo viaje'}</button></header>
-  <nav class="primary-nav" aria-label="Navegación principal">${[['decide','D','Decidir'],['catalog','C','Catálogo'],['plan','I','Itinerario']].map(([id,line,label]) => `<button class="nav-button ${state.view === id ? 'active' : ''}" data-view="${id}"><span class="nav-line">${line}</span>${label}</button>`).join('')}</nav>`;
+  const title = state.view === 'detail' ? 'Ficha completa' : state.view === 'decide' ? '¿Qué hacemos ahora?' : state.view === 'catalog' ? 'Catálogo de Nueva York' : state.view === 'today' ? 'Qué hacer hoy' : 'Plan familiar';
+  return `<header class="masthead"><div class="brand"><div class="brand-mark"><span>NY</span><i></i></div><div><p class="eyebrow">Guía familiar · 2026</p><h1>${title}</h1></div></div><button class="mode" data-action="toggle-mode">${state.mode === 'preparation' ? 'Modo preparación' : 'Modo viaje'}</button></header>
+  <nav class="primary-nav" aria-label="Navegación principal">${[['decide','D','Decidir'],['catalog','C','Catálogo'],['today','H','Hoy'],['plan','P','Plan']].map(([id,line,label]) => `<button class="nav-button ${state.view === id ? 'active' : ''}" data-view="${id}"><span class="nav-line">${line}</span>${label}</button>`).join('')}</nav>`;
 }
 
 function notice() {
@@ -124,6 +130,13 @@ function selectOptions(values, selected, emptyLabel) {
 }
 
 function activityFor(item) {
+  if (item.itemKind === 'activity') {
+    const text = normalize(`${item.category} ${item.type}`);
+    if (/mercado|food|comida|gastronom/.test(text)) return 'comida';
+    if (/deporte|calle|publico|paseo/.test(text)) return 'paseo';
+    if (/shopping|compras/.test(text)) return 'compras';
+    return 'cultura';
+  }
   const text = normalize(`${item.type} ${item.subtype} ${item.category}`);
   if (/gastronom|restaurante|pizza|comida|mercado|panader/.test(text)) return 'comida';
   if (/compra|tienda|outlet|shopping/.test(text)) return 'compras';
@@ -211,6 +224,80 @@ async function toggleNearMe() {
   }
 }
 
+async function activateLocationForToday() {
+  if (state.todayMode === 'near') {
+    state.todayMode = 'today';
+    render();
+    return;
+  }
+  state.locating = true;
+  state.message = null;
+  render();
+  try {
+    const position = await getCurrentPosition();
+    state.userLocation = { lat: position.coords.latitude, lng: position.coords.longitude, accuracy: position.coords.accuracy };
+    state.todayMode = 'near';
+    state.message = { type: 'success', text: 'Ubicación activada. Actividades cercanas primero.' };
+  } catch (error) {
+    state.message = { type: 'error', text: error.code === 1 ? 'Permiso de ubicación denegado.' : (error.message || 'No se pudo obtener tu ubicación.') };
+  } finally {
+    state.locating = false;
+    render();
+  }
+}
+
+function parseDateOnly(value) {
+  if (!value) return null;
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+function dateKey(date) {
+  return date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` : '';
+}
+
+function isActivityToday(item, today = new Date()) {
+  const start = parseDateOnly(item.startDate);
+  const end = parseDateOnly(item.endDate || item.startDate);
+  if (!start) return false;
+  const current = parseDateOnly(dateKey(today));
+  return start <= current && (!end || end >= current);
+}
+
+function isUpcomingActivity(item, today = new Date()) {
+  const end = parseDateOnly(item.endDate || item.startDate);
+  return end && end >= parseDateOnly(dateKey(today));
+}
+
+function formatActivityDate(item) {
+  const start = parseDateOnly(item.startDate);
+  const end = parseDateOnly(item.endDate || item.startDate);
+  if (!start) return 'Fecha por confirmar';
+  const formatter = new Intl.DateTimeFormat('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
+  if (end && dateKey(end) !== dateKey(start)) return `${formatter.format(start)} – ${formatter.format(end)}`;
+  return formatter.format(start);
+}
+
+function activityTime(item) {
+  return [item.startTime, item.endTime].filter(Boolean).join('–') || item.bestMoment || '';
+}
+
+function activitySortValue(item) {
+  return `${item.startDate || '9999-99-99'} ${item.startTime || '99:99'}`;
+}
+
+function visibleActivities() {
+  let items = state.activities.filter(item => item.status !== 'descartado');
+  if (state.todayMode === 'today') items = items.filter(isActivityToday);
+  if (state.todayMode === 'upcoming') items = items.filter(isUpcomingActivity);
+  if (state.todayMode === 'near') {
+    items = items.filter(hasCoords).map(item => ({ ...item, distanceKm: distanceKm(item) })).sort((a, b) => (a.distanceKm ?? 9999) - (b.distanceKm ?? 9999) || activitySortValue(a).localeCompare(activitySortValue(b)));
+    return items;
+  }
+  return items.sort((a, b) => activitySortValue(a).localeCompare(activitySortValue(b)));
+}
+
 function decideMatches() {
   const d = state.decide;
   return state.catalog.filter(item => {
@@ -251,6 +338,30 @@ function recommendationCards() {
   return `<div class="results" style="margin-top:16px">${matches.map((item, index) => `<article class="card type-${activityFor(item)} ${index === 0 ? 'recommended' : ''}">${visualCardHead(item)}<span class="badge ${index===0?'accent':''}">${labels[index]}</span><h3>${escapeHtml(item.name)}</h3><p class="muted">${escapeHtml([item.area,item.type || item.subtype].filter(Boolean).join(' · '))}</p><p>${escapeHtml(cardDescription(item) || 'Una opción que encaja con las condiciones seleccionadas.')}</p>${knowNote(item)}<div class="badge-row">${item.distanceKm != null ? `<span class="badge distance">${escapeHtml(formatDistance(item.distanceKm))}</span>` : ''}<span class="badge">${escapeHtml(item.timeNeeded || `${item.idealMinutes || '?'} min`)}</span>${item.setting ? `<span class="badge">${escapeHtml(item.setting)}</span>` : ''}<span class="badge family">${familyCount(item.id)} de ${CONFIG.familySize || 4} interesados</span></div><div class="actions"><button class="button ${index===0?'primary':''}" data-add-plan="${escapeHtml(item.id)}">Añadir al plan</button><button class="button" data-detail="${escapeHtml(item.id)}">Ver ficha</button>${item.mapsUrl ? `<a class="button" href="${escapeHtml(item.mapsUrl)}" target="_blank" rel="noopener">Google Maps</a>` : ''}</div></article>`).join('')}</div>`;
 }
 
+function activityCard(item) {
+  const ticketUrl = item.ticketUrl || '';
+  const infoUrl = ticketUrl || item.officialUrl || '';
+  const reservation = item.reservationRequired ? String(item.reservationRequired) : '';
+  return `<article class="card activity-card type-${activityFor(item)}">${visualCardHead(item)}<div class="activity-main"><div class="badge-row"><span class="badge accent">${escapeHtml(formatActivityDate(item))}</span>${activityTime(item) ? `<span class="badge time-badge">${escapeHtml(activityTime(item))}</span>` : ''}${item.price ? `<span class="badge price-badge">${escapeHtml(item.price)}</span>` : ''}${reservation ? `<span class="badge reserve-badge">${escapeHtml(reservation === 'Sí' ? 'Reserva necesaria' : reservation === 'Opcional' ? 'Reserva opcional' : 'Sin reserva')}</span>` : ''}${item.distanceKm != null ? `<span class="badge distance">${escapeHtml(formatDistance(item.distanceKm))}</span>` : ''}</div><h3>${escapeHtml(item.name)}</h3><p class="muted">${escapeHtml([item.category, item.area, item.borough].filter(Boolean).join(' · '))}</p>${item.notes ? `<p class="activity-note">${escapeHtml(item.notes)}</p>` : ''}<div class="actions"><button class="button primary" data-add-plan="${escapeHtml(item.id)}">Añadir al plan</button>${infoUrl ? `<a class="button" href="${escapeHtml(infoUrl)}" target="_blank" rel="noopener">${ticketUrl ? 'Entradas / RSVP' : 'Web oficial'}</a>` : ''}${item.mapsUrl ? `<a class="button" href="${escapeHtml(item.mapsUrl)}" target="_blank" rel="noopener">Maps</a>` : ''}</div></div></article>`;
+}
+
+function renderToday() {
+  if (state.loadingCatalog) {
+    return `<section class="view active"><div class="section-head"><div><h2>Hoy en Nueva York</h2><p class="muted">Cargando calendario de actividades…</p></div></div><div class="panel empty loading-panel"><h3>Sincronizando con Google Sheets</h3><p class="muted">La agenda aparecerá aquí en cuanto llegue el snapshot.</p></div></section>`;
+  }
+  const items = visibleActivities();
+  const modeLabel = state.todayMode === 'today' ? 'actividades para hoy' : state.todayMode === 'upcoming' ? 'próximas actividades' : 'actividades cercanas';
+  return `<section class="view active"><div class="section-head"><div><h2>Hoy en Nueva York</h2><p class="muted">${state.activities.length} actividades en calendario · ${items.length} ${modeLabel}</p></div></div>
+    <div class="panel intro station-sign"><span class="station-kicker">Agenda viva</span><h3>Planes con hora, fecha o reserva</h3><p class="muted">Aquí separaremos eventos, mercados, conciertos, cine al aire libre y actividades que no son simplemente “lugares”.</p></div>
+    <div class="today-tabs" role="group" aria-label="Filtro de agenda">
+      <button class="today-chip ${state.todayMode === 'today' ? 'active' : ''}" data-today-mode="today">Hoy</button>
+      <button class="today-chip ${state.todayMode === 'upcoming' ? 'active' : ''}" data-today-mode="upcoming">Próximos</button>
+      <button class="today-chip ${state.todayMode === 'near' ? 'active' : ''}" data-action="today-near" ${state.locating ? 'disabled' : ''}>${state.locating ? 'Buscando…' : 'Cerca de mí'}</button>
+    </div>
+    ${items.length ? `<div class="activity-list">${items.map(activityCard).join('')}</div>` : `<div class="panel empty"><h3>No hay nada para este filtro</h3><p class="muted">${state.todayMode === 'today' ? 'Durante el viaje esta vista enseñará sólo lo que encaje con la fecha del día. Puedes mirar “Próximos” para ver todo el calendario cargado.' : 'Prueba con otro filtro o revisa que las actividades tengan fecha y coordenadas.'}</p><button class="button primary" data-today-mode="upcoming">Ver próximos</button></div>`}
+  </section>`;
+}
+
 function catalogFiltered() {
   const f = state.filters;
   return state.catalog.filter(item => {
@@ -287,7 +398,7 @@ function itemComments(itemId) {
 }
 
 function renderDetail() {
-  const item = state.catalog.find(entry => entry.id === state.detailId);
+  const item = allItems().find(entry => entry.id === state.detailId);
   if (!item) { state.view = 'catalog'; return renderCatalog(); }
   const comments = itemComments(item.id);
   const description = item.description || item.shortDescription || item.whyItMatters || item.bestFor || 'Todavía no hay una descripción editorial completa.';
@@ -296,10 +407,10 @@ function renderDetail() {
   const km = distanceKm(item);
   return `<section class="view active detail-view"><button class="back-link" data-action="back-detail">← Volver</button>
     <header class="detail-hero type-${activityFor(item)}"><div><div class="badge-row"><span class="subway-bullet">${routeBadge(activityFor(item))}</span><span class="badge accent">${escapeHtml(item.type || item.itemKind)}</span>${item.origin === 'family' ? '<span class="badge">Propuesto por la familia</span>' : ''}</div><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml([item.area,item.borough].filter(Boolean).join(' · '))}</p></div><div class="detail-monogram" aria-hidden="true"><span>${activityIcon(activityFor(item))}</span><small>${escapeHtml(item.name.slice(0,2).toUpperCase())}</small></div></header>
-    <div class="detail-actions"><button class="button primary" data-add-plan="${escapeHtml(item.id)}">Añadir al itinerario</button><button class="button interest-button ${state.interests.has(item.id)?'selected':''}" data-interest="${escapeHtml(item.id)}">${state.interests.has(item.id)?'Me interesa':'Me gustaría ir'}</button>${item.mapsUrl ? `<a class="button" href="${escapeHtml(item.mapsUrl)}" target="_blank" rel="noopener">Abrir en Maps</a>` : ''}${item.officialUrl ? `<a class="button" href="${escapeHtml(item.officialUrl)}" target="_blank" rel="noopener">Web oficial</a>` : ''}</div>
+    <div class="detail-actions"><button class="button primary" data-add-plan="${escapeHtml(item.id)}">Añadir al itinerario</button><button class="button interest-button ${state.interests.has(item.id)?'selected':''}" data-interest="${escapeHtml(item.id)}">${state.interests.has(item.id)?'Me interesa':'Me gustaría ir'}</button>${item.mapsUrl ? `<a class="button" href="${escapeHtml(item.mapsUrl)}" target="_blank" rel="noopener">Abrir en Maps</a>` : ''}${item.ticketUrl ? `<a class="button" href="${escapeHtml(item.ticketUrl)}" target="_blank" rel="noopener">Entradas / RSVP</a>` : ''}${item.officialUrl ? `<a class="button" href="${escapeHtml(item.officialUrl)}" target="_blank" rel="noopener">Web oficial</a>` : ''}</div>
     <div class="detail-layout"><div class="detail-main">
       <section class="detail-section"><p class="detail-lead">${escapeHtml(description)}</p>${context && context !== description ? `<p>${escapeHtml(context)}</p>` : ''}</section>
-      <section class="detail-section"><h3>Información práctica</h3><dl class="facts-list">${detailFact('Distancia',formatDistance(km))}${detailFact('Duración',item.timeNeeded || (item.idealMinutes ? `${item.idealMinutes} min` : ''))}${detailFact('Precio',item.price || item.costLevel)}${detailFact('Mejor momento',item.bestMoment)}${detailFact('Entorno',item.setting || item.weatherFit)}${detailFact('Energía',item.energyLevel)}${detailFact('Reserva',item.reservationStatus)}${detailFact('Dirección',item.address)}${detailFact('Última comprobación',item.lastChecked)}</dl></section>
+      <section class="detail-section"><h3>Información práctica</h3><dl class="facts-list">${detailFact('Fecha', item.itemKind === 'activity' ? formatActivityDate(item) : '')}${detailFact('Hora', activityTime(item))}${detailFact('Distancia',formatDistance(km))}${detailFact('Duración',item.timeNeeded || (item.idealMinutes ? `${item.idealMinutes} min` : ''))}${detailFact('Precio',item.price || item.costLevel)}${detailFact('Mejor momento',item.bestMoment)}${detailFact('Entorno',item.setting || item.weatherFit)}${detailFact('Energía',item.energyLevel)}${detailFact('Reserva',item.reservationRequired || item.reservationStatus)}${detailFact('Dirección',item.address)}${detailFact('Última comprobación',item.lastChecked)}</dl></section>
       ${item.notes ? `<section class="detail-section"><h3>Conviene saber</h3><p>${escapeHtml(item.notes)}</p></section>` : ''}
       <section class="detail-section"><div class="comments-head"><div><h3>Comentarios familiares</h3><p class="muted">Consejos y opiniones compartidos durante la preparación y el viaje.</p></div><span class="badge family">${comments.length}</span></div>${comments.length ? `<div class="comments-list">${comments.map(comment => `<article class="family-comment"><span class="comment-type">${escapeHtml(comment.commentType || 'comentario')}</span><p>${escapeHtml(comment.text)}</p><time>${escapeHtml(formatDate(comment.createdAt))}</time></article>`).join('')}</div>` : '<p class="muted">Todavía no hay comentarios.</p>'}
       <form id="comment-form" class="comment-form"><label>Tipo<select name="commentType"><option value="consejo">Consejo</option><option value="opinión">Opinión</option><option value="aviso">Aviso</option></select></label><label>Comentario<textarea name="text" required maxlength="600" rows="3" placeholder="Añade algo útil para la familia"></textarea></label><button class="button primary" type="submit">Publicar comentario</button></form></section>
@@ -322,9 +433,21 @@ function proposalForm() {
 }
 
 function renderPlan() {
-  const items = state.plan.map(id => state.catalog.find(item => itemKey(item.id) === itemKey(id))).filter(Boolean);
+  const items = state.plan.map(id => allItems().find(item => itemKey(item.id) === itemKey(id))).filter(Boolean);
   const pendingText = state.pendingPlanRemovals.size ? ` · ${state.pendingPlanRemovals.size} borrado${state.pendingPlanRemovals.size === 1 ? '' : 's'} pendiente${state.pendingPlanRemovals.size === 1 ? '' : 's'} de sincronizar` : '';
-  return `<section class="view active"><div class="section-head"><div><h2>Plan familiar</h2><p class="muted">${items.length} ${items.length===1?'parada':'paradas'} · ${state.onlineData ? 'sincronizado con Google Sheets' : 'guardado en este dispositivo hasta sincronizar'}${pendingText}</p></div></div>${items.length ? `<div class="panel intro station-sign"><span class="station-kicker">Plan compartido</span><h3>Itinerario familiar</h3><p class="muted">Las paradas añadidas o quitadas se guardan en el plan común cuando la sincronización está disponible.</p></div><div class="plan-list">${items.map((item,index) => `<article class="card plan-item"><div class="plan-position">${index+1}</div><div><h3>${escapeHtml(item.name)}</h3><p class="muted">${escapeHtml([item.area,item.timeNeeded].filter(Boolean).join(' · '))}</p></div><button class="button small danger" data-remove-plan="${escapeHtml(item.id)}">Quitar</button></article>`).join('')}</div><button class="button primary block" style="margin-top:14px" data-action="maps-plan">Abrir recorrido en Google Maps</button>` : `<div class="panel empty"><h3>El itinerario familiar está vacío</h3><p class="muted">Añade lugares desde Decidir o desde el catálogo. Si hay conexión, se guardarán en el plan común.</p><button class="button primary" data-view="decide">Buscar un plan</button></div>`}</section>`;
+  return `<section class="view active"><div class="section-head"><div><h2>Plan familiar</h2><p class="muted">${items.length} ${items.length===1?'parada':'paradas'} · ${state.onlineData ? 'sincronizado con Google Sheets' : 'guardado en este dispositivo hasta sincronizar'}${pendingText}</p></div></div>${items.length ? `<div class="panel intro station-sign"><span class="station-kicker">Plan compartido</span><h3>Itinerario familiar</h3><p class="muted">Las paradas añadidas o quitadas se guardan en el plan común cuando la sincronización está disponible.</p></div><div class="plan-list">${items.map((item,index) => `<article class="card plan-item type-${activityFor(item)}"><div class="plan-position">${index+1}</div><div><div class="badge-row"><span class="badge">${item.itemKind === 'activity' ? 'Actividad' : 'Lugar'}</span>${item.itemKind === 'activity' && activityTime(item) ? `<span class="badge time-badge">${escapeHtml(activityTime(item))}</span>` : ''}</div><h3>${escapeHtml(item.name)}</h3><p class="muted">${escapeHtml([item.itemKind === 'activity' ? formatActivityDate(item) : '', item.area, item.timeNeeded].filter(Boolean).join(' · '))}</p></div><button class="button small danger" data-remove-plan="${escapeHtml(item.id)}">Quitar</button></article>`).join('')}</div><button class="button primary block" style="margin-top:14px" data-action="maps-plan">Abrir recorrido en Google Maps</button>` : `<div class="panel empty"><h3>El plan familiar está vacío</h3><p class="muted">Añade lugares desde Decidir o Catálogo, o actividades desde Hoy. Si hay conexión, se guardarán en el plan común.</p><button class="button primary" data-view="today">Ver actividades</button></div>`}</section>`;
+}
+
+async function addToPlan(itemId, button) {
+  const id = itemKey(itemId);
+  const item = allItems().find(entry => itemKey(entry.id) === id);
+  state.pendingPlanRemovals.delete(id);
+  if (!state.plan.some(planId => itemKey(planId) === id)) state.plan.push(id);
+  saveLocal();
+  if (button) button.textContent = 'Añadido';
+  try {
+    await writeAction('planItem', { deviceId: state.deviceId, itemId: id, itemKind: item?.itemKind || 'place', position: state.plan.length });
+  } catch {}
 }
 
 async function removeFromPlan(itemId) {
@@ -340,7 +463,7 @@ async function removeFromPlan(itemId) {
 }
 
 function openMapsPlan() {
-  const items = state.plan.map(id => state.catalog.find(item => itemKey(item.id) === itemKey(id))).filter(item => item?.lat && item?.lng);
+  const items = state.plan.map(id => allItems().find(item => itemKey(item.id) === itemKey(id))).filter(item => item?.lat && item?.lng);
   if (!items.length) {
     state.message = { type: 'error', text: 'No hay lugares con coordenadas en el itinerario.' };
     render();
@@ -352,7 +475,7 @@ function openMapsPlan() {
 }
 
 function render() {
-  app.innerHTML = `<main class="shell">${appHeader()}${notice()}${state.view === 'detail' ? renderDetail() : state.view === 'decide' ? renderDecide() : state.view === 'catalog' ? renderCatalog() : renderPlan()}</main>`;
+  app.innerHTML = `<main class="shell">${appHeader()}${notice()}${state.view === 'detail' ? renderDetail() : state.view === 'decide' ? renderDecide() : state.view === 'catalog' ? renderCatalog() : state.view === 'today' ? renderToday() : renderPlan()}</main>`;
   bindEvents();
 }
 
@@ -362,6 +485,8 @@ function bindEvents() {
   document.querySelector('[data-action="back-detail"]')?.addEventListener('click', () => { state.view = 'catalog'; render(); });
   document.querySelector('[data-action="toggle-mode"]')?.addEventListener('click', () => { state.mode = state.mode === 'preparation' ? 'trip' : 'preparation'; state.view = state.mode === 'preparation' ? 'catalog' : 'decide'; render(); });
   document.querySelector('[data-action="near"]')?.addEventListener('click', toggleNearMe);
+  document.querySelector('[data-action="today-near"]')?.addEventListener('click', activateLocationForToday);
+  document.querySelectorAll('[data-today-mode]').forEach(button => button.addEventListener('click', () => { state.todayMode = button.dataset.todayMode; state.message = null; render(); }));
   document.querySelectorAll('[data-decide]').forEach(control => control.addEventListener('change', () => { state.decide[control.dataset.decide] = control.dataset.decide === 'time' ? Number(control.value) : control.value; if (control.dataset.decide === 'borough') state.decide.area = ''; render(); }));
   document.querySelectorAll('[data-activity]').forEach(button => button.addEventListener('click', () => { state.decide.activity = button.dataset.activity; render(); }));
   document.querySelector('[data-action="show-results"]')?.addEventListener('click', () => { document.querySelector('#recommendations').innerHTML = recommendationCards(); bindResultEvents(); document.querySelector('#recommendations').scrollIntoView({behavior:'smooth',block:'start'}); });
@@ -381,16 +506,16 @@ function bindEvents() {
       nextSearch?.setSelectionRange(cursor, cursor);
     }
   }));
-  document.querySelectorAll('[data-interest]').forEach(button => button.addEventListener('click', async () => { const id = button.dataset.interest; state.interests.has(id) ? state.interests.delete(id) : state.interests.add(id); saveLocal(); render(); try { await writeAction('interest', { deviceId: state.deviceId, itemId: id, itemKind: state.catalog.find(item => item.id===id)?.itemKind || 'place', interested: state.interests.has(id) }); } catch {} }));
+  document.querySelectorAll('[data-interest]').forEach(button => button.addEventListener('click', async () => { const id = button.dataset.interest; state.interests.has(id) ? state.interests.delete(id) : state.interests.add(id); saveLocal(); render(); try { await writeAction('interest', { deviceId: state.deviceId, itemId: id, itemKind: allItems().find(item => item.id===id)?.itemKind || 'place', interested: state.interests.has(id) }); } catch {} }));
   document.querySelectorAll('[data-remove-plan]').forEach(button => button.addEventListener('click', () => removeFromPlan(button.dataset.removePlan)));
-  document.querySelectorAll('[data-add-plan]').forEach(button => button.addEventListener('click', async () => { const id = itemKey(button.dataset.addPlan); state.pendingPlanRemovals.delete(id); if (!state.plan.some(planId => itemKey(planId) === id)) state.plan.push(id); saveLocal(); button.textContent='Añadido'; try { await writeAction('planItem',{deviceId:state.deviceId,itemId:id,position:state.plan.length}); } catch {} }));
+  document.querySelectorAll('[data-add-plan]').forEach(button => button.addEventListener('click', () => addToPlan(button.dataset.addPlan, button)));
   document.querySelector('[data-action="maps-plan"]')?.addEventListener('click', openMapsPlan);
   document.querySelector('#comment-form')?.addEventListener('submit', submitComment);
 }
 
 function bindResultEvents() {
   document.querySelector('[data-action="relax"]')?.addEventListener('click', () => { state.decide.time=999; state.decide.energy='cualquiera'; state.decide.setting='cualquiera'; render(); });
-  document.querySelectorAll('[data-add-plan]').forEach(button => button.addEventListener('click', async () => { const id = itemKey(button.dataset.addPlan); state.pendingPlanRemovals.delete(id); if (!state.plan.some(planId => itemKey(planId) === id)) state.plan.push(id); saveLocal(); button.textContent='Añadido'; try { await writeAction('planItem',{deviceId:state.deviceId,itemId:id,position:state.plan.length}); } catch {} }));
+  document.querySelectorAll('[data-add-plan]').forEach(button => button.addEventListener('click', () => addToPlan(button.dataset.addPlan, button)));
   document.querySelectorAll('#recommendations [data-detail]').forEach(button => button.addEventListener('click', () => { state.detailId = button.dataset.detail; state.view = 'detail'; state.message = null; render(); window.scrollTo({top:0,behavior:'smooth'}); }));
 }
 
