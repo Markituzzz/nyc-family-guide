@@ -15,6 +15,7 @@ const state = {
   visible: 24,
   loadingCatalog: true,
   onlineData: false,
+  activitiesSynced: false,
   message: null,
   detailId: null,
   remoteComments: [],
@@ -93,6 +94,7 @@ async function loadRemote() {
   }))];
   if (items.length) state.catalog = items;
   state.activities = activities.filter(item => item.id && item.name);
+  state.activitiesSynced = Object.prototype.hasOwnProperty.call(payload.data || {}, 'activities');
   state.remoteInterests = payload.data.interests || [];
   state.remoteComments = payload.data.comments || [];
   const remotePlanIds = (payload.data.itineraryItems || [])
@@ -410,15 +412,17 @@ function renderToday() {
   const items = visibleActivities();
   const groups = groupedActivities(items);
   const modeLabel = state.todayMode === 'all' ? 'actividades disponibles' : state.todayMode === 'today' ? 'actividades para hoy' : state.todayMode === 'upcoming' ? 'próximas actividades' : 'actividades cercanas';
+  const syncWarning = state.onlineData && !state.activitiesSynced ? `<div class="notice error"><strong>Calendario no sincronizado.</strong> La app está conectada a Google Sheets, pero el Apps Script publicado todavía no devuelve <code>activities</code>. Actualiza y redespliega el script para ver la pestaña CalendarioActividades.</div>` : '';
   return `<section class="view active"><div class="section-head"><div><h2>Hoy en Nueva York</h2><p class="muted">${state.activities.length} actividades en calendario · ${items.length} ${modeLabel}</p></div></div>
     <div class="panel intro station-sign"><span class="station-kicker">Agenda viva</span><h3>Planes con hora, fecha o reserva</h3><p class="muted">Aquí separaremos eventos, mercados, conciertos, cine al aire libre y actividades que no son simplemente “lugares”.</p></div>
+    ${syncWarning}
     <div class="today-tabs" role="group" aria-label="Filtro de agenda">
       <button class="today-chip ${state.todayMode === 'all' ? 'active' : ''}" data-today-mode="all">Todo</button>
       <button class="today-chip ${state.todayMode === 'today' ? 'active' : ''}" data-today-mode="today">Hoy</button>
       <button class="today-chip ${state.todayMode === 'upcoming' ? 'active' : ''}" data-today-mode="upcoming">Próximos</button>
       <button class="today-chip ${state.todayMode === 'near' ? 'active' : ''}" data-action="today-near" ${state.locating ? 'disabled' : ''}>${state.locating ? 'Buscando…' : 'Cerca de mí'}</button>
     </div>
-    ${items.length ? `<div class="activity-calendar">${groups.map(group => `<section class="activity-day"><div class="activity-day-head"><h3>${escapeHtml(group.label)}</h3><span class="badge">${group.items.length}</span></div><div class="activity-list">${group.items.map(activityCard).join('')}</div></section>`).join('')}</div>` : `<div class="panel empty"><h3>No hay nada para este filtro</h3><p class="muted">${state.todayMode === 'today' ? 'Durante el viaje esta vista enseñará sólo lo que encaje con la fecha del día. Puedes mirar “Todo” para ver el calendario completo y votar con antelación.' : 'Prueba con otro filtro o revisa que las actividades tengan fecha y coordenadas.'}</p><button class="button primary" data-today-mode="all">Ver todo</button></div>`}
+    ${items.length ? `<div class="activity-calendar">${groups.map(group => `<section class="activity-day"><div class="activity-day-head"><h3>${escapeHtml(group.label)}</h3><span class="badge">${group.items.length}</span></div><div class="activity-list">${group.items.map(activityCard).join('')}</div></section>`).join('')}</div>` : `<div class="panel empty"><h3>${state.activitiesSynced ? 'No hay nada para este filtro' : 'Falta sincronizar el calendario'}</h3><p class="muted">${!state.activitiesSynced ? 'La pestaña existe y tiene datos, pero la versión publicada del Apps Script aún no los está enviando a la web.' : state.todayMode === 'today' ? 'Durante el viaje esta vista enseñará sólo lo que encaje con la fecha del día. Puedes mirar “Todo” para ver el calendario completo y votar con antelación.' : 'Prueba con otro filtro o revisa que las actividades tengan fecha y coordenadas.'}</p><button class="button primary" data-today-mode="all">Ver todo</button></div>`}
   </section>`;
 }
 
