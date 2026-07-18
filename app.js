@@ -264,10 +264,14 @@ function activityIcon(activity) {
 }
 
 function placeIcon(item) {
-  const text = normalize(`${item.type} ${item.subtype} ${item.category} ${item.name} ${item.shortDescription} ${item.whyItMatters} ${item.notes}`);
-  if (/musica|música|jazz|club|venue|concierto|rock|opera|ópera/.test(text)) return '🎵';
-  if (/cine|movie|film/.test(text)) return '🎬';
-  if (/teatro|broadway|show/.test(text)) return '🎭';
+  const rawText = `${item.type} ${item.subtype} ${item.category} ${item.name} ${item.shortDescription} ${item.whyItMatters} ${item.notes}`;
+  const text = normalize(rawText);
+  const slugText = slug(rawText);
+  if (activityFor(item) === 'compras') return activityIcon('compras');
+  if (activityFor(item) === 'comida') return activityIcon('comida');
+  if (/(^|_)musica($|_)|(^|_)jazz($|_)|(^|_)club($|_)|(^|_)venue($|_)|(^|_)concierto($|_)|(^|_)rock($|_)|(^|_)opera($|_)/.test(slugText)) return '🎵';
+  if (/(^|_)cine($|_)|(^|_)movie($|_)|(^|_)film($|_)/.test(slugText)) return '🎬';
+  if (/(^|_)teatro($|_)|(^|_)broadway($|_)|(^|_)show($|_)/.test(slugText)) return '🎭';
   if (/museo|arte|galeria|galería/.test(text)) return '🖼️';
   if (/mirador|observatory|skyline/.test(text)) return '🌇';
   return activityIcon(activityFor(item));
