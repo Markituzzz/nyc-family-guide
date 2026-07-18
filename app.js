@@ -143,6 +143,7 @@ function humanize(value) {
 
 function activityLabel(value) {
   const labels = {
+    actividad_participativa: 'Actividad participativa',
     actividad_urbana: 'Actividad urbana',
     bienestar: 'Bienestar',
     cine: 'Cine',
@@ -150,8 +151,13 @@ function activityLabel(value) {
     deporte: 'Deporte',
     familia: 'Familia',
     gastronomia: 'Gastronomía',
+    malabares_participativos: 'Malabares participativos',
     mercado: 'Mercado',
+    naturaleza: 'Naturaleza',
     musica: 'Música',
+    paseo_guiado_naturaleza: 'Paseo guiado de naturaleza',
+    torneo_ping_pong: 'Torneo de ping pong',
+    yoga: 'Yoga',
     alternativa: 'Alternativa',
     backup: 'Backup',
     cerca_si_encaja: 'Cerca si encaja',
@@ -169,7 +175,7 @@ function activityFor(item) {
   if (item.itemKind === 'activity') {
     const text = slug(`${item.category} ${item.subcategory} ${item.type} ${item.name}`);
     if (/mercado|food|comida|gastronom|pop_up/.test(text)) return 'comida';
-    if (/deporte|baseball|yankees|calle|publico|paseo|actividad_urbana|calles_abiertas|bienestar|matinal/.test(text)) return 'paseo';
+    if (/deporte|baseball|yankees|calle|publico|paseo|actividad_urbana|calles_abiertas|bienestar|matinal|actividad_participativa|malabares|yoga|ping_pong|naturaleza/.test(text)) return 'paseo';
     if (/shopping|compras/.test(text)) return 'compras';
     return 'cultura';
   }
@@ -198,12 +204,15 @@ function calendarIcon(item) {
   if (/musica|concert|festival|guitar|opera|jazz|salsa|dance_floor|piano|singalong|hip_hop|reggae|rnb|bhangra/.test(text)) return '🎵';
   if (/cine|movie|film/.test(text)) return '🎬';
   if (/summer_streets|open_streets|calles_abiertas|actividad_urbana|festival_comunitario/.test(text)) return '🌆';
+  if (/actividad_participativa|malabares|juggling/.test(text)) return '🤹';
+  if (/yoga|bienestar|matinal/.test(text)) return '🧘';
+  if (/naturaleza|nature|paseo_guiado_naturaleza/.test(text)) return '🌿';
+  if (/ping_pong|table_tennis/.test(text)) return '🏓';
   if (/bike|bici|ciclismo/.test(text)) return '🚲';
   if (/yankees|baseball/.test(text)) return '⚾';
   if (/deporte/.test(text)) return '🏃';
   if (/mercado|market|greenmarket|smorgasburg|vendors|food|gastronomia|pop_up/.test(text)) return '🍴';
   if (/danza|baile|dance|ballroom/.test(text)) return '💃';
-  if (/bienestar|matinal/.test(text)) return '🌿';
   if (/familia|kids|children|terrestrials/.test(text)) return '🎈';
   return '🎟️';
 }
@@ -213,12 +222,15 @@ function calendarBadge(item) {
   if (/musica|concert|festival|guitar|opera|jazz|salsa/.test(text)) return '♪';
   if (/cine|movie|film/.test(text)) return '▶';
   if (/summer_streets|open_streets|calles_abiertas|actividad_urbana/.test(text)) return 'NY';
+  if (/actividad_participativa|malabares|juggling/.test(text)) return 'Play';
+  if (/yoga|bienestar|matinal/.test(text)) return 'Zen';
+  if (/naturaleza|nature|paseo_guiado_naturaleza/.test(text)) return 'Eco';
+  if (/ping_pong|table_tennis/.test(text)) return '🏓';
   if (/bike|bici|ciclismo/.test(text)) return '🚲';
   if (/yankees|baseball/.test(text)) return '⚾';
   if (/deporte/.test(text)) return 'Run';
   if (/mercado|market|greenmarket|smorgasburg|vendors|food/.test(text)) return '🍴';
   if (/danza|baile|dance/.test(text)) return '★';
-  if (/bienestar|matinal/.test(text)) return '☘';
   if (/familia|kids|children|terrestrials/.test(text)) return 'F';
   return 'T';
 }
