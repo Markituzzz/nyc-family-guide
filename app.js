@@ -378,6 +378,12 @@ function activityTimeSortValue(item) {
   return `${item.startTime || '99:99'} ${item.endTime || '99:99'} ${item.name || ''}`;
 }
 
+function activityDaySort(a, b) {
+  return activityTimeSortValue(a).localeCompare(activityTimeSortValue(b))
+    || activityScore(b) - activityScore(a)
+    || activitySortValue(a).localeCompare(activitySortValue(b));
+}
+
 function activityScore(item) {
   const priority = { alta: 3, media: 2, baja: 1 }[normalize(item.priority)] || 1;
   const fit = { 'muy alta': 4, alta: 3, media: 2, baja: 1 }[normalize(item.familyFit)] || 1;
@@ -429,9 +435,7 @@ function groupedActivities(items) {
     .map(([key, groupItems]) => ({
       key,
       label: activityDateHeading(key),
-      items: groupItems.sort((a, b) => state.todayView === 'calendar'
-        ? activityTimeSortValue(a).localeCompare(activityTimeSortValue(b))
-        : activityScore(b) - activityScore(a) || activitySortValue(a).localeCompare(activitySortValue(b)))
+      items: groupItems.sort(activityDaySort)
     }));
 }
 
