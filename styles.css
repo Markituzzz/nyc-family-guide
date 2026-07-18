@@ -154,7 +154,10 @@ textarea { resize: vertical; }
 .activity-list { display: grid; gap: 12px; }
 .activity-card { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; }
 .activity-card .visual-head { width: 44px; display: grid; gap: 7px; justify-items: center; margin: 0; padding-top: 4px; }
+.calendar-badge { width: 34px; height: 34px; display: inline-grid; place-items: center; flex: 0 0 auto; border-radius: 10px; background: var(--ink); color: var(--paper); border: 2px solid var(--type-color); font-size: .92rem; font-weight: 950; line-height: 1; box-shadow: 2px 2px 0 rgba(16,19,22,.22); }
+.calendar-icon { border-radius: 12px; background: color-mix(in srgb, var(--type-color) 28%, #fff); }
 .activity-card .route-line { width: 10px; height: 86px; background: linear-gradient(90deg, transparent 0 2px, var(--type-color) 2px 8px, transparent 8px 10px); }
+.activity-card .calendar-line { background: repeating-linear-gradient(0deg, var(--type-color) 0 9px, transparent 9px 15px); border-radius: 99px; opacity: .82; }
 .activity-card .route-line::before { top: 0; left: 50%; transform: translateX(-50%); }
 .activity-card .route-line::after { top: auto; bottom: 0; right: auto; left: 50%; transform: translateX(-50%); }
 .activity-card h3 { margin: 4px 0; }
