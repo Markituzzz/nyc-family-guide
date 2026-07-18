@@ -13,7 +13,7 @@ const state = {
   todayView: 'agenda',
   todayMode: 'all',
   filtersOpen: false,
-  decide: { near: false, borough: 'Manhattan', area: '', activity: 'cultura', time: 999, energy: 'cualquiera', setting: 'cualquiera', familyInterest: 'all' },
+  decide: { near: false, borough: 'Manhattan', area: '', activity: 'cultura', activities: ['cultura'], time: 999, energy: 'cualquiera', setting: 'cualquiera', familyInterest: 'all' },
   decideVisible: 3,
   visible: 24,
   loadingCatalog: true,
@@ -567,14 +567,20 @@ function visibleActivities() {
 
 function decideMatches() {
   const d = state.decide;
-  const source = d.activity === 'agenda' ? state.activities : state.catalog;
+  const selectedActivities = d.activities?.length ? d.activities : [d.activity || 'cultura'];
+  const includeAgenda = selectedActivities.includes('agenda');
+  const placeActivities = selectedActivities.filter(activity => activity !== 'agenda');
+  const source = [
+    ...(placeActivities.length ? state.catalog : []),
+    ...(includeAgenda ? state.activities : [])
+  ];
   return source.filter(item => {
     if (item.itemKind === 'activity' && item.status === 'descartado') return false;
     if (item.itemKind === 'activity' && !isUpcomingActivity(item)) return false;
     if (d.near && state.userLocation && !hasCoords(item)) return false;
     if (!d.near && d.borough && item.borough && item.borough !== d.borough) return false;
     if (!d.near && d.area && decisionArea(item) !== d.area) return false;
-    if (d.activity !== 'agenda' && activityFor(item) !== d.activity && !isUnclassifiedFamilyProposal(item)) return false;
+    if (item.itemKind !== 'activity' && !placeActivities.includes(activityFor(item)) && !isUnclassifiedFamilyProposal(item)) return false;
     if (d.time < 999 && item.maxMinutes && Number(item.maxMinutes) > d.time) return false;
     if (d.energy === 'bajo' && normalize(item.energyLevel) && normalize(item.energyLevel) !== 'bajo') return false;
     if (!matchesSetting(item, d.setting)) return false;
@@ -594,16 +600,20 @@ function decideMatches() {
 }
 
 function renderDecide() {
-  const decideSource = state.decide.activity === 'agenda' ? state.activities : state.catalog;
+  const selectedActivities = state.decide.activities?.length ? state.decide.activities : [state.decide.activity || 'cultura'];
+  const decideSource = [
+    ...(selectedActivities.some(activity => activity !== 'agenda') ? state.catalog : []),
+    ...(selectedActivities.includes('agenda') ? state.activities : [])
+  ];
   const boroughs = unique(decideSource.map(item => item.borough));
   const areas = unique(decideSource.filter(item => !state.decide.borough || item.borough === state.decide.borough).map(decisionArea));
   const matches = decideMatches();
   const locationHint = state.decide.near && state.userLocation ? `Ubicación activa · precisión aprox. ${Math.round(state.userLocation.accuracy || 0)} m` : state.locating ? 'Solicitando ubicación…' : state.locationError || 'Usa tu ubicación para ordenar por distancia.';
   return `<section class="view active"><div class="panel intro station-sign"><span class="station-kicker">Línea familiar</span><h2>Reducimos las opciones por vosotros</h2><p class="muted">Elige solo lo importante. Los intereses previos ayudan a ordenar los resultados.</p></div>
   <div class="step"><h3>1 · ¿Dónde queréis estar?</h3><div class="location-grid"><div><button class="button near ${state.decide.near ? 'active' : ''}" data-action="near" ${state.locating ? 'disabled' : ''}>${state.locating ? 'Buscando…' : state.decide.near ? 'Cerca de mí activo' : 'Cerca de mí'}</button><p class="location-hint">${escapeHtml(locationHint)}</p></div><label>Borough<select data-decide="borough" ${state.decide.near ? 'disabled' : ''}>${selectOptions(boroughs,state.decide.borough,'Cualquier borough')}</select></label><label>Zona o barrio<select data-decide="area" ${state.decide.near ? 'disabled' : ''}>${selectOptions(areas,state.decide.area,'Cualquier zona')}</select></label></div></div>
-  <div class="step"><h3>2 · ¿Qué os apetece?</h3><div class="choice-grid">${[['cultura','Cultura e iconos'],['paseo','Pasear y descubrir'],['comida','Comer algo'],['compras','Compras'],['agenda','Agenda cultural']].map(([id,label]) => `<button class="choice type-${id} ${state.decide.activity === id ? 'active' : ''}" data-activity="${id}"><span class="choice-icon">${activityIcon(id)}</span>${label}</button>`).join('')}</div></div>
+  <div class="step"><h3>2 · ¿Qué os apetece?</h3><p class="muted mini-help">Puedes marcar varias opciones.</p><div class="choice-grid">${[['cultura','Cultura e iconos'],['paseo','Pasear y descubrir'],['comida','Comer algo'],['compras','Compras'],['agenda','Agenda cultural']].map(([id,label]) => `<button class="choice type-${id} ${selectedActivities.includes(id) ? 'active' : ''}" data-activity="${id}"><span class="choice-icon">${activityIcon(id)}</span>${label}</button>`).join('')}</div></div>
   <div class="step"><h3>3 · Condiciones del momento</h3><div class="conditions"><label>Tiempo<select data-decide="time"><option value="60" ${state.decide.time===60?'selected':''}>Menos de 1 hora</option><option value="120" ${state.decide.time===120?'selected':''}>1–2 horas</option><option value="240" ${state.decide.time===240?'selected':''}>Media jornada</option><option value="999" ${state.decide.time===999?'selected':''}>Sin límite</option></select></label><label>Energía<select data-decide="energy"><option value="bajo" ${state.decide.energy==='bajo'?'selected':''}>Plan tranquilo</option><option value="medio" ${state.decide.energy==='medio'?'selected':''}>Podemos caminar</option><option value="cualquiera" ${state.decide.energy==='cualquiera'?'selected':''}>Nos da igual</option></select></label><label>Clima<select data-decide="setting"><option value="interior" ${state.decide.setting==='interior'?'selected':''}>Necesitamos interior</option><option value="exterior" ${state.decide.setting==='exterior'?'selected':''}>Preferimos exterior</option><option value="cualquiera" ${state.decide.setting==='cualquiera'?'selected':''}>Indiferente</option></select></label><label>Interés familiar<select data-decide="familyInterest"><option value="all" ${state.decide.familyInterest==='all'?'selected':''}>Todas las opciones</option><option value="any" ${state.decide.familyInterest==='any'?'selected':''}>Seleccionadas por alguien</option><option value="shared" ${state.decide.familyInterest==='shared'?'selected':''}>Coincidencias familiares</option></select></label></div></div>
-  <p class="match-count"><strong>${matches.length}</strong> ${state.decide.activity === 'agenda' ? 'actividades' : 'lugares o experiencias'} encajan.</p><button class="button primary block" data-action="show-results">Ver las mejores opciones</button><div id="recommendations"></div></section>`;
+  <p class="match-count"><strong>${matches.length}</strong> opciones encajan.</p><button class="button primary block" data-action="show-results">Ver las mejores opciones</button><div id="recommendations"></div></section>`;
 }
 
 function recommendationCards() {
@@ -797,7 +807,16 @@ function bindEvents() {
   document.querySelectorAll('[data-today-filter]').forEach(control => control.addEventListener('change', () => { state.todayFilters[control.dataset.todayFilter] = control.value; render(); }));
   document.querySelector('[data-action="clear-today-filters"]')?.addEventListener('click', () => { state.todayFilters = { type: '', date: '' }; render(); });
   document.querySelectorAll('[data-decide]').forEach(control => control.addEventListener('change', () => { state.decide[control.dataset.decide] = control.dataset.decide === 'time' ? Number(control.value) : control.value; state.decideVisible = 3; if (control.dataset.decide === 'borough') state.decide.area = ''; render(); }));
-  document.querySelectorAll('[data-activity]').forEach(button => button.addEventListener('click', () => { state.decide.activity = button.dataset.activity; state.decideVisible = 3; render(); }));
+  document.querySelectorAll('[data-activity]').forEach(button => button.addEventListener('click', () => {
+    const activity = button.dataset.activity;
+    const selected = new Set(state.decide.activities?.length ? state.decide.activities : [state.decide.activity || 'cultura']);
+    selected.has(activity) ? selected.delete(activity) : selected.add(activity);
+    if (!selected.size) selected.add(activity);
+    state.decide.activities = [...selected];
+    state.decide.activity = state.decide.activities[0];
+    state.decideVisible = 3;
+    render();
+  }));
   document.querySelector('[data-action="show-results"]')?.addEventListener('click', () => { document.querySelector('#recommendations').innerHTML = recommendationCards(); bindResultEvents(); document.querySelector('#recommendations').scrollIntoView({behavior:'smooth',block:'start'}); });
   document.querySelector('[data-action="proposal-form"]')?.addEventListener('click', () => { document.querySelector('#proposal-slot').innerHTML = proposalForm(); bindProposal(); });
   document.querySelector('[data-action="toggle-filters"]')?.addEventListener('click', () => { state.filtersOpen = !state.filtersOpen; render(); });
