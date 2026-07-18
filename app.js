@@ -14,6 +14,7 @@ const state = {
   todayMode: 'all',
   filtersOpen: false,
   decide: { near: false, borough: 'Manhattan', area: '', activity: 'cultura', time: 999, energy: 'cualquiera', setting: 'cualquiera', familyInterest: 'all' },
+  decideVisible: 3,
   visible: 24,
   loadingCatalog: true,
   onlineData: false,
@@ -537,10 +538,12 @@ function renderDecide() {
 }
 
 function recommendationCards() {
-  const matches = decideMatches().slice(0, 3);
+  const allMatches = decideMatches();
+  const matches = allMatches.slice(0, state.decideVisible);
   if (!matches.length) return `<div class="panel empty"><h3>No hay coincidencias exactas</h3><p class="muted">Amplía el tiempo o marca clima y energía como indiferentes.</p><button class="button" data-action="relax">Relajar condiciones</button></div>`;
   const labels = ['La que mejor encaja', 'Favorita familiar', 'Una alternativa'];
-  return `<div class="results" style="margin-top:16px">${matches.map((item, index) => `<article class="card type-${activityFor(item)} ${index === 0 ? 'recommended' : ''}">${visualCardHead(item)}<span class="badge ${index===0?'accent':''}">${labels[index]}</span><h3>${escapeHtml(item.name)}</h3><p class="muted">${escapeHtml([item.area,item.type || item.subtype].filter(Boolean).join(' · '))}</p><p>${escapeHtml(cardDescription(item) || 'Una opción que encaja con las condiciones seleccionadas.')}</p>${knowNote(item)}<div class="badge-row">${item.distanceKm != null ? `<span class="badge distance">${escapeHtml(formatDistance(item.distanceKm))}</span>` : ''}<span class="badge">${escapeHtml(item.timeNeeded || `${item.idealMinutes || '?'} min`)}</span>${item.setting ? `<span class="badge">${escapeHtml(item.setting)}</span>` : ''}<span class="badge family">${escapeHtml(familyVoteLabel(item.id))}</span></div><div class="actions"><button class="button ${index===0?'primary':''}" data-add-plan="${escapeHtml(item.id)}">Añadir al plan</button><button class="button" data-detail="${escapeHtml(item.id)}">Ver ficha</button>${item.mapsUrl ? `<a class="button" href="${escapeHtml(item.mapsUrl)}" target="_blank" rel="noopener">Google Maps</a>` : ''}</div></article>`).join('')}</div>`;
+  const moreCount = Math.max(0, allMatches.length - matches.length);
+  return `<div class="results" style="margin-top:16px">${matches.map((item, index) => `<article class="card type-${activityFor(item)} ${index === 0 ? 'recommended' : ''}">${visualCardHead(item)}<span class="badge ${index===0?'accent':''}">${labels[index] || `Opción ${index + 1}`}</span><h3>${escapeHtml(item.name)}</h3><p class="muted">${escapeHtml([item.area,item.type || item.subtype].filter(Boolean).join(' · '))}</p><p>${escapeHtml(cardDescription(item) || 'Una opción que encaja con las condiciones seleccionadas.')}</p>${knowNote(item)}<div class="badge-row">${item.distanceKm != null ? `<span class="badge distance">${escapeHtml(formatDistance(item.distanceKm))}</span>` : ''}<span class="badge">${escapeHtml(item.timeNeeded || `${item.idealMinutes || '?'} min`)}</span>${item.setting ? `<span class="badge">${escapeHtml(item.setting)}</span>` : ''}<span class="badge family">${escapeHtml(familyVoteLabel(item.id))}</span></div><div class="actions"><button class="button ${index===0?'primary':''}" data-add-plan="${escapeHtml(item.id)}">Añadir al plan</button><button class="button" data-detail="${escapeHtml(item.id)}">Ver ficha</button>${item.mapsUrl ? `<a class="button" href="${escapeHtml(item.mapsUrl)}" target="_blank" rel="noopener">Google Maps</a>` : ''}</div></article>`).join('')}</div>${moreCount ? `<button class="button block" style="margin-top:14px" data-action="more-decide-results">Ver más opciones (${moreCount} restantes)</button>` : `<p class="muted" style="margin-top:12px">Ya estás viendo todas las opciones que encajan.</p>`}`;
 }
 
 function activityCard(item) {
@@ -721,8 +724,8 @@ function bindEvents() {
   document.querySelectorAll('[data-today-mode]').forEach(button => button.addEventListener('click', () => { state.todayMode = button.dataset.todayMode; state.message = null; render(); }));
   document.querySelectorAll('[data-today-filter]').forEach(control => control.addEventListener('change', () => { state.todayFilters[control.dataset.todayFilter] = control.value; render(); }));
   document.querySelector('[data-action="clear-today-filters"]')?.addEventListener('click', () => { state.todayFilters = { type: '', date: '' }; render(); });
-  document.querySelectorAll('[data-decide]').forEach(control => control.addEventListener('change', () => { state.decide[control.dataset.decide] = control.dataset.decide === 'time' ? Number(control.value) : control.value; if (control.dataset.decide === 'borough') state.decide.area = ''; render(); }));
-  document.querySelectorAll('[data-activity]').forEach(button => button.addEventListener('click', () => { state.decide.activity = button.dataset.activity; render(); }));
+  document.querySelectorAll('[data-decide]').forEach(control => control.addEventListener('change', () => { state.decide[control.dataset.decide] = control.dataset.decide === 'time' ? Number(control.value) : control.value; state.decideVisible = 3; if (control.dataset.decide === 'borough') state.decide.area = ''; render(); }));
+  document.querySelectorAll('[data-activity]').forEach(button => button.addEventListener('click', () => { state.decide.activity = button.dataset.activity; state.decideVisible = 3; render(); }));
   document.querySelector('[data-action="show-results"]')?.addEventListener('click', () => { document.querySelector('#recommendations').innerHTML = recommendationCards(); bindResultEvents(); document.querySelector('#recommendations').scrollIntoView({behavior:'smooth',block:'start'}); });
   document.querySelector('[data-action="proposal-form"]')?.addEventListener('click', () => { document.querySelector('#proposal-slot').innerHTML = proposalForm(); bindProposal(); });
   document.querySelector('[data-action="toggle-filters"]')?.addEventListener('click', () => { state.filtersOpen = !state.filtersOpen; render(); });
@@ -766,6 +769,11 @@ function bindEvents() {
 
 function bindResultEvents() {
   document.querySelector('[data-action="relax"]')?.addEventListener('click', () => { state.decide.time=999; state.decide.energy='cualquiera'; state.decide.setting='cualquiera'; render(); });
+  document.querySelector('[data-action="more-decide-results"]')?.addEventListener('click', () => {
+    state.decideVisible += 6;
+    document.querySelector('#recommendations').innerHTML = recommendationCards();
+    bindResultEvents();
+  });
   document.querySelectorAll('[data-add-plan]').forEach(button => button.addEventListener('click', () => addToPlan(button.dataset.addPlan, button)));
   document.querySelectorAll('#recommendations [data-detail]').forEach(button => button.addEventListener('click', () => { state.detailId = button.dataset.detail; state.view = 'detail'; state.message = null; render(); window.scrollTo({top:0,behavior:'smooth'}); }));
 }
